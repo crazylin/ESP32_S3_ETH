@@ -93,7 +93,6 @@ jobs:
       run: |
         cd nf-interpreter
         mkdir -p build
-        cd build
         
         source ~/esp/esp-idf/export.sh
         
