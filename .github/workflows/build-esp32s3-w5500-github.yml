@@ -57,12 +57,13 @@ jobs:
         git clone --recursive https://github.com/espressif/esp-idf.git
         cd esp-idf
         ./install.sh esp32s3
-        . $HOME/esp/esp-idf/export.sh
+        echo "ESP-IDF installation completed"
 
     - name: Setup ESP-IDF Environment
       run: |
-        echo "ESP_IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
-        echo "$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+        echo "ESP_IDF_PATH=$PWD/esp-idf" >> $GITHUB_ENV
+        echo "ESP_IDF_PATH=$PWD/esp-idf" >> $GITHUB_ENV
+        echo "PATH=$PWD/esp-idf/tools:$PATH" >> $GITHUB_ENV
 
     - name: Clone nanoFramework
       run: |
@@ -79,7 +80,7 @@ jobs:
         mkdir -p build
         cd build
         
-        source ~/esp/esp-idf/export.sh
+        source ../../esp-idf/export.sh
         
         # 使用自定义预设，根据构建类型选择
         if [ "${{ matrix.build_type }}" = "Release" ]; then
@@ -91,7 +92,7 @@ jobs:
     - name: Build Firmware
       run: |
         cd nf-interpreter/build
-        source ~/esp/esp-idf/export.sh
+        source ../../esp-idf/export.sh
         cmake --build . -- -j$(nproc)
 
     - name: Check Build Artifacts

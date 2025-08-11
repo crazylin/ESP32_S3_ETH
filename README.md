@@ -24,7 +24,7 @@
 
 #### 手动触发构建
 1. 进入 **Actions** 标签页
-2. 选择 **Build ESP32-S3 + W5500** 工作流
+2. 选择 **Build ESP32-S3 + W5500 nanoFramework Firmware** 工作流
 3. 点击 **Run workflow**
 4. 选择构建类型:
    - **Release**: 生产版本，优化大小，禁用调试
