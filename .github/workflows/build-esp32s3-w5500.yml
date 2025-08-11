@@ -2,10 +2,7 @@ name: Build ESP32-S3 + W5500 nanoFramework Firmware
 
 on:
   push:
-    branches: [ main, develop ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ main ]
+    branches: [ main]
   workflow_dispatch:
     inputs:
       build_type:
@@ -32,7 +29,7 @@ jobs:
     
     strategy:
       matrix:
-        build_type: [${{ github.event.inputs.build_type || 'Release' }}]
+        build_type: ["${{ github.event.inputs.build_type || 'Release' }}"]
         include:
           - build_type: Release
             cmake_build_type: MinSizeRel
