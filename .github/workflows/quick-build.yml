@@ -19,6 +19,7 @@ jobs:
         repository: nanoframework/nf-interpreter
         path: nf-interpreter
         submodules: recursive
+        fetch-depth: 0
 
     - name: Install Dependencies
       run: |
@@ -48,6 +49,7 @@ jobs:
           -DNF_FEATURE_DEBUGGER=ON \
           -DNF_BUILD_RTM=OFF \
           -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_TOOLCHAIN_FILE="$HOME/esp/esp-idf/tools/cmake/toolchain-esp32s3.cmake" \
           -DESP32_IDF_PATH="$HOME/esp/esp-idf" \
           -DESP32_ETHERNET_SUPPORT=ON \
           -DESP32_ETHERNET_PHY="W5500" \

@@ -55,6 +55,7 @@ jobs:
         repository: nanoframework/nf-interpreter
         path: nf-interpreter
         submodules: recursive
+        fetch-depth: 0
 
     - name: Setup Ubuntu Environment
       run: |
@@ -92,6 +93,8 @@ jobs:
         cd nf-interpreter
         mkdir -p build
         cd build
+        
+        source ~/esp/esp-idf/export.sh
         
         cmake .. \
           -DTOOLCHAIN_PREFIX="xtensa-esp32s3-elf-" \
@@ -135,6 +138,7 @@ jobs:
           -DSUPPORT_ANY_BASE_CONVERSION=ON \
           -DNF_PLATFORM_NO_CLR_WARNINGS=ON \
           -DCMAKE_BUILD_TYPE=${{ matrix.cmake_build_type }} \
+          -DCMAKE_TOOLCHAIN_FILE="$HOME/esp/esp-idf/tools/cmake/toolchain-esp32s3.cmake" \
           -DESP32_IDF_PATH="$HOME/esp/esp-idf" \
           -DESP32_ETHERNET_SUPPORT=ON \
           -DESP32_ETHERNET_PHY="W5500" \
