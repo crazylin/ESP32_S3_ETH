@@ -55,11 +55,17 @@
         "ESP32_ETHERNET_MOSI_PIN": "11",
         "ESP32_ETHERNET_CS_PIN": "14",
         "ESP32_ETHERNET_INT_PIN": "10",
-        "ESP32_ETHERNET_RESET_PIN": "9"
+        "ESP32_ETHERNET_RESET_PIN": "9",
+        "CMAKE_C_COMPILER": "$ENV{CC}",
+        "CMAKE_CXX_COMPILER": "$ENV{CXX}",
+        "CMAKE_MAKE_PROGRAM": "$ENV{CMAKE_MAKE_PROGRAM}"
       },
       "environment": {
         "ESP_IDF_PATH": "$ENV{ESP_IDF_PATH}",
-        "PATH": "$ENV{PATH}"
+        "PATH": "$ENV{PATH}",
+        "CC": "$ENV{CC}",
+        "CXX": "$ENV{CXX}",
+        "CMAKE_MAKE_PROGRAM": "$ENV{CMAKE_MAKE_PROGRAM}"
       }
     },
     {
@@ -116,11 +122,17 @@
         "ESP32_ETHERNET_MOSI_PIN": "11",
         "ESP32_ETHERNET_CS_PIN": "14",
         "ESP32_ETHERNET_INT_PIN": "10",
-        "ESP32_ETHERNET_RESET_PIN": "9"
+        "ESP32_ETHERNET_RESET_PIN": "9",
+        "CMAKE_C_COMPILER": "$ENV{CC}",
+        "CMAKE_CXX_COMPILER": "$ENV{CXX}",
+        "CMAKE_MAKE_PROGRAM": "$ENV{CMAKE_MAKE_PROGRAM}"
       },
       "environment": {
         "ESP_IDF_PATH": "$ENV{ESP_IDF_PATH}",
-        "PATH": "$ENV{PATH}"
+        "PATH": "$ENV{PATH}",
+        "CC": "$ENV{CC}",
+        "CXX": "$ENV{CXX}",
+        "CMAKE_MAKE_PROGRAM": "$ENV{CMAKE_MAKE_PROGRAM}"
       }
     }
   ],

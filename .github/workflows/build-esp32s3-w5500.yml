@@ -81,6 +81,12 @@ jobs:
         git clone -b ${{ env.ESP_IDF_VERSION }} --recursive https://github.com/espressif/esp-idf.git
         cd esp-idf
         ./install.sh esp32s3
+        
+        # 验证安装
+        echo "=== ESP-IDF Installation Verification ==="
+        ls -la ~/.espressif/tools/ | head -10
+        echo "ESP-IDF version: $(git describe --tags --abbrev=0)"
+        echo "========================================"
 
     - name: Setup ESP-IDF Environment
       run: |
@@ -102,6 +108,11 @@ jobs:
         echo "PATH=$HOME/.espressif/tools/ccache/4.8/ccache-4.8-linux-x86_64:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/dfu-util/0.11/dfu-util-0.11/dfu-util:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/esp-rom-elfs/20230320:$PATH" >> $GITHUB_ENV
+        
+        # 设置编译器环境变量
+        echo "CC=$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
+        echo "CXX=$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+        echo "CMAKE_MAKE_PROGRAM=$HOME/.espressif/tools/ninja/1.10.2/ninja" >> $GITHUB_ENV
 
     - name: Verify Build Tools
       run: |
@@ -114,17 +125,56 @@ jobs:
         echo "ESP_IDF_PATH: $ESP_IDF_PATH"
         echo "PATH: $PATH"
         echo "================================"
+        
+        # 验证 ESP-IDF 工具链
+        echo "=== ESP-IDF Toolchain Verification ==="
+        if [ -d "$HOME/.espressif" ]; then
+          echo "ESP-IDF tools directory exists"
+          ls -la $HOME/.espressif/tools/ | head -10
+        else
+          echo "ESP-IDF tools directory not found"
+        fi
+        
+        # 检查关键工具
+        if [ -f "$HOME/.espressif/tools/ninja/1.10.2/ninja" ]; then
+          echo "Ninja found: $HOME/.espressif/tools/ninja/1.10.2/ninja"
+          $HOME/.espressif/tools/ninja/1.10.2/ninja --version
+        else
+          echo "Ninja not found in expected location"
+        fi
+        
+        if [ -f "$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc" ]; then
+          echo "ESP32-S3 compiler found"
+          $HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc --version | head -1
+        else
+          echo "ESP32-S3 compiler not found in expected location"
+        fi
+        echo "====================================="
 
     - name: Copy Custom CMake Presets
       run: |
         cp nanobuild-scripts/CMakePresets-W5500.json nf-interpreter/CMakePresets.json
 
+    - name: Verify ESP-IDF Environment
+      run: |
+        # 加载 ESP-IDF 环境
+        source ~/esp/esp-idf/export.sh
+        
+        echo "=== ESP-IDF Environment Verification ==="
+        echo "ESP_IDF_PATH: $ESP_IDF_PATH"
+        echo "IDF_TOOLS_PATH: $IDF_TOOLS_PATH"
+        echo "PATH includes ESP-IDF tools: $(echo $PATH | grep -o '[^:]*esp-idf[^:]*' | head -5)"
+        echo "Ninja version: $(ninja --version)"
+        echo "ESP32-S3 compiler: $(which xtensa-esp32s3-elf-gcc)"
+        echo "========================================="
+
     - name: Configure CMake with Preset
       run: |
+        set -e
         cd nf-interpreter
         mkdir -p build
         
-        # 设置 ESP-IDF 环境
+        # 设置 ESP-IDF 环境（必须在同一 shell 中）
         source ~/esp/esp-idf/export.sh
         
         # 显示环境变量
@@ -133,7 +183,21 @@ jobs:
         echo "PATH: $PATH"
         echo "CC: $CC"
         echo "CXX: $CXX"
+        echo "CMAKE_MAKE_PROGRAM: $CMAKE_MAKE_PROGRAM"
         echo "============================"
+        
+        # 验证关键工具
+        echo "=== Tool Verification ==="
+        which ninja || { echo "ninja not found in PATH"; exit 1; }
+        ninja --version
+        which xtensa-esp32s3-elf-gcc || { echo "ESP32-S3 compiler not found"; exit 1; }
+        xtensa-esp32s3-elf-gcc --version | head -1
+        echo "========================="
+        
+        # 显示可用的 CMake 预设
+        echo "=== Available CMake Presets ==="
+        cmake --list-presets || true
+        echo "================================"
         
         # 使用自定义预设，根据构建类型选择
         if [ "${{ matrix.build_type }}" = "Release" ]; then
