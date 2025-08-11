@@ -167,6 +167,34 @@ jobs:
         echo "Ninja version: $(ninja --version)"
         echo "ESP32-S3 compiler: $(which xtensa-esp32s3-elf-gcc)"
         echo "========================================="
+        
+        # 验证关键环境变量
+        echo "=== Key Environment Variables ==="
+        echo "CC: $CC"
+        echo "CXX: $CXX"
+        echo "CMAKE_MAKE_PROGRAM: $CMAKE_MAKE_PROGRAM"
+        echo "================================="
+        
+        # 验证工具文件存在
+        echo "=== Tool File Verification ==="
+        if [ -f "$CC" ]; then
+          echo "✓ CC exists: $CC"
+        else
+          echo "✗ CC not found: $CC"
+        fi
+        
+        if [ -f "$CXX" ]; then
+          echo "✓ CXX exists: $CXX"
+        else
+          echo "✗ CXX not found: $CXX"
+        fi
+        
+        if [ -f "$CMAKE_MAKE_PROGRAM" ]; then
+          echo "✓ CMAKE_MAKE_PROGRAM exists: $CMAKE_MAKE_PROGRAM"
+        else
+          echo "✗ CMAKE_MAKE_PROGRAM not found: $CMAKE_MAKE_PROGRAM"
+        fi
+        echo "================================"
 
     - name: Configure CMake with Preset
       run: |
@@ -177,6 +205,15 @@ jobs:
         # 设置 ESP-IDF 环境（必须在同一 shell 中）
         source ~/esp/esp-idf/export.sh
         
+        # 手动设置关键环境变量以确保它们被正确设置
+        export ESP_IDF_PATH="$HOME/esp/esp-idf"
+        export IDF_TOOLS_PATH="$HOME/.espressif"
+        export PATH="$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin:$PATH"
+        export PATH="$HOME/.espressif/tools/ninja/1.10.2:$PATH"
+        export CC="$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc"
+        export CXX="$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-g++"
+        export CMAKE_MAKE_PROGRAM="$HOME/.espressif/tools/ninja/1.10.2/ninja"
+        
         # 显示环境变量
         echo "=== Environment Variables ==="
         echo "ESP_IDF_PATH: $ESP_IDF_PATH"
@@ -186,6 +223,39 @@ jobs:
         echo "CMAKE_MAKE_PROGRAM: $CMAKE_MAKE_PROGRAM"
         echo "============================"
         
+        # 验证工具路径
+        echo "=== Tool Path Verification ==="
+        echo "CC path: $CC"
+        echo "CXX path: $CXX"
+        echo "Ninja path: $CMAKE_MAKE_PROGRAM"
+        
+        # 检查文件是否存在
+        if [ -f "$CC" ]; then
+          echo "✓ CC file exists"
+          ls -la "$CC"
+        else
+          echo "✗ CC file not found: $CC"
+          exit 1
+        fi
+        
+        if [ -f "$CXX" ]; then
+          echo "✓ CXX file exists"
+          ls -la "$CXX"
+        else
+          echo "✗ CXX file not found: $CXX"
+          exit 1
+        fi
+        
+        if [ -f "$CMAKE_MAKE_PROGRAM" ]; then
+          echo "✓ Ninja file exists"
+          ls -la "$CMAKE_MAKE_PROGRAM"
+          "$CMAKE_MAKE_PROGRAM" --version
+        else
+          echo "✗ Ninja file not found: $CMAKE_MAKE_PROGRAM"
+          exit 1
+        fi
+        echo "============================="
+        
         # 验证关键工具
         echo "=== Tool Verification ==="
         which ninja || { echo "ninja not found in PATH"; exit 1; }
@@ -194,18 +264,48 @@ jobs:
         xtensa-esp32s3-elf-gcc --version | head -1
         echo "========================="
         
+        # 验证 ESP-IDF 工具
+        echo "=== ESP-IDF Tool Verification ==="
+        if command -v idf.py >/dev/null 2>&1; then
+          echo "✓ idf.py found"
+          idf.py --version
+        else
+          echo "✗ idf.py not found"
+        fi
+        
+        if [ -n "$ESP_IDF_PATH" ]; then
+          echo "✓ ESP_IDF_PATH is set: $ESP_IDF_PATH"
+        else
+          echo "✗ ESP_IDF_PATH is not set"
+        fi
+        
+        if [ -n "$IDF_TOOLS_PATH" ]; then
+          echo "✓ IDF_TOOLS_PATH is set: $IDF_TOOLS_PATH"
+        else
+          echo "✗ IDF_TOOLS_PATH is not set"
+        fi
+        echo "================================"
+        
         # 显示可用的 CMake 预设
         echo "=== Available CMake Presets ==="
         cmake --list-presets || true
         echo "================================"
         
-        # 使用自定义预设，根据构建类型选择
+        # 使用自定义预设，根据构建类型选择，并传递编译器变量
         if [ "${{ matrix.build_type }}" = "Release" ]; then
           echo "Configuring with ESP32_S3_W5500_Release preset..."
-          cmake --preset ESP32_S3_W5500_Release -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake --preset ESP32_S3_W5500_Release \
+            -DCMAKE_VERBOSE_MAKEFILE=ON \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_MAKE_PROGRAM="$CMAKE_MAKE_PROGRAM"
         else
           echo "Configuring with ESP32_S3_W5500_Debug preset..."
-          cmake --preset ESP32_S3_W5500_Debug -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake --preset ESP32_S3_W5500_Debug \
+            -DCMAKE_VERBOSE_MAKEFILE=ON \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_MAKE_PROGRAM="$CMAKE_MAKE_PROGRAM"
         fi
         
         # 显示 CMake 缓存
