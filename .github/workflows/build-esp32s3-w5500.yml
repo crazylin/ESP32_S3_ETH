@@ -149,7 +149,7 @@ jobs:
     - name: Build Firmware
       run: |
         cd nf-interpreter/build
-        cmake --build . --target ESP32_S3 -- -j$(nproc)
+        cmake --build . --target nanoCLR -- -j$(nproc)
 
     - name: Calculate Firmware Size
       id: firmware_size
