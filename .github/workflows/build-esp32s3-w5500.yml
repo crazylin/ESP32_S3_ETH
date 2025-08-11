@@ -163,7 +163,7 @@ jobs:
 
     - name: Create Release Notes
       run: |
-        cat > release-notes.md << EOF
+        cat > release-notes.md << 'EOF'
         # ESP32-S3 + W5500 nanoFramework Firmware
         
         ## Build Information
@@ -186,15 +186,9 @@ jobs:
           - RST: GPIO9
         
         ## Features
-        $(if [ "${{ matrix.build_type }}" = "Release" ]; then
-          echo "- ✅ Production optimized (RTM enabled)"
-          echo "- ✅ Debugger disabled"
-          echo "- ✅ Size optimized"
-        else
-          echo "- ✅ Full debugging support"
-          echo "- ✅ Debug symbols included"
-          echo "- ✅ Visual Studio debugging"
-        fi)
+        - ${{ matrix.build_type == 'Release' && '✅ Production optimized (RTM enabled)' || '✅ Full debugging support' }}
+        - ${{ matrix.build_type == 'Release' && '✅ Debugger disabled' || '✅ Debug symbols included' }}
+        - ${{ matrix.build_type == 'Release' && '✅ Size optimized' || '✅ Visual Studio debugging' }}
         
         ## Usage
         1. Flash the firmware using nanoFramework Flash Tool
@@ -202,8 +196,8 @@ jobs:
         3. Use nanoFramework Visual Studio extension for development
         
         ## Downloads
-        - Firmware: \`nanoCLR.bin\`
-        - Release notes: \`release-notes.md\`
+        - Firmware: `nanoCLR.bin`
+        - Release notes: `release-notes.md`
         EOF
 
     - name: Upload Firmware Artifact
