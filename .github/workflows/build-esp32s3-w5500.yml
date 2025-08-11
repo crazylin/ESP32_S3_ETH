@@ -80,12 +80,66 @@ jobs:
         cd ~/esp
         git clone -b ${{ env.ESP_IDF_VERSION }} --recursive https://github.com/espressif/esp-idf.git
         cd esp-idf
+        
+        # 显示 ESP-IDF 版本和安装脚本信息
+        echo "=== ESP-IDF Version Info ==="
+        echo "Branch: ${{ env.ESP_IDF_VERSION }}"
+        echo "Commit: $(git rev-parse HEAD)"
+        echo "Install script exists: $(test -f ./install.sh && echo 'Yes' || echo 'No')"
+        echo "Install script permissions: $(ls -la ./install.sh)"
+        echo "============================="
+        
+        # 检查安装脚本的帮助信息
+        echo "=== Install Script Help ==="
+        ./install.sh --help | head -30
+        echo "==========================="
+        
+        # 安装 ESP32-S3 工具链
+        echo "=== Installing ESP32-S3 Toolchain ==="
         ./install.sh esp32s3
         
         # 验证安装
         echo "=== ESP-IDF Installation Verification ==="
         ls -la ~/.espressif/tools/ | head -10
         echo "ESP-IDF version: $(git describe --tags --abbrev=0)"
+        
+        # 验证 ESP32-S3 工具链是否安装成功
+        echo "=== ESP32-S3 Toolchain Verification ==="
+        if [ -d "$HOME/.espressif/tools/xtensa-esp32s3-elf" ]; then
+          echo "✓ ESP32-S3 toolchain directory found"
+          find "$HOME/.espressif/tools/xtensa-esp32s3-elf" -name "*gcc" -type f
+        else
+          echo "✗ ESP32-S3 toolchain directory not found"
+          echo "Available toolchains:"
+          ls -la "$HOME/.espressif/tools/" || echo "No tools directory found"
+          
+          # 尝试手动安装 ESP32-S3 工具链
+          echo "Attempting to install ESP32-S3 toolchain manually..."
+          cd ~/esp/esp-idf
+          
+          # 尝试不同的安装方法
+          echo "Method 1: Installing with esp32s3 target..."
+          ./install.sh esp32s3 || {
+            echo "Method 1 failed, trying Method 2: Installing all targets..."
+            ./install.sh || {
+              echo "Method 2 failed, trying Method 3: Installing specific toolchain..."
+              ./install.sh --targets esp32s3 || {
+                echo "All installation methods failed!"
+                echo "Available installation options:"
+                ./install.sh --help | head -20
+                exit 1
+              }
+            }
+          }
+          
+          # 再次验证
+          if [ -d "$HOME/.espressif/tools/xtensa-esp32s3-elf" ]; then
+            echo "✓ ESP32-S3 toolchain installed successfully"
+          else
+            echo "✗ Failed to install ESP32-S3 toolchain"
+            exit 1
+          fi
+        fi
         echo "========================================"
 
     - name: Setup ESP-IDF Environment
@@ -97,22 +151,48 @@ jobs:
         echo "IDF_TOOLS_PATH=$HOME/.espressif" >> $GITHUB_ENV
         echo "IDF_PYTHON_ENV_PATH=$HOME/.espressif/python_env/idf5.2_py3.12_env" >> $GITHUB_ENV
         
-        # 确保工具链在 PATH 中
-        echo "PATH=$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin:$PATH" >> $GITHUB_ENV
-        echo "PATH=$HOME/.espressif/tools/riscv32-esp-elf/esp-12.2.0_20230208/riscv32-esp-elf/bin:$PATH" >> $GITHUB_ENV
-        echo "PATH=$HOME/.espressif/tools/esp32ulp-elf/2.35_20220830/esp32ulp-elf/bin:$PATH" >> $GITHUB_ENV
+        # 动态查找并设置工具链路径
+        echo "=== Dynamic Toolchain Path Setup ==="
+        
+        # 查找 ESP32-S3 工具链
+        ESP32S3_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
+        if [ -n "$ESP32S3_TOOLCHAIN" ]; then
+          echo "Found ESP32-S3 toolchain: $ESP32S3_TOOLCHAIN"
+          echo "PATH=$ESP32S3_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
+          echo "CC=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
+          echo "CXX=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+        else
+          echo "ESP32-S3 toolchain not found, trying to find any Xtensa toolchain..."
+          XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -1)
+          if [ -n "$XTENSA_TOOLCHAIN" ]; then
+            echo "Found Xtensa toolchain: $XTENSA_TOOLCHAIN"
+            echo "PATH=$XTENSA_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
+            echo "CC=$XTENSA_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
+            echo "CXX=$XTENSA_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+          else
+            echo "No Xtensa toolchain found!"
+            exit 1
+          fi
+        fi
+        
+        # 查找并设置 Ninja 路径
+        NINJA_PATH=$(find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null | head -1)
+        if [ -n "$NINJA_PATH" ]; then
+          echo "Found Ninja: $NINJA_PATH"
+          echo "PATH=$(dirname "$NINJA_PATH"):$PATH" >> $GITHUB_ENV
+          echo "CMAKE_MAKE_PROGRAM=$NINJA_PATH" >> $GITHUB_ENV
+        else
+          echo "Ninja not found!"
+          exit 1
+        fi
+        
+        # 设置其他常用工具路径
         echo "PATH=$HOME/.espressif/tools/cmake/3.24.0/bin:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/openocd-esp32/v0.12.0-esp32-20230419/openocd-esp32/bin:$PATH" >> $GITHUB_ENV
-        echo "PATH=$HOME/.espressif/tools/ninja/1.10.2:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/idf-exe/1.0.3:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/ccache/4.8/ccache-4.8-linux-x86_64:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/dfu-util/0.11/dfu-util-0.11/dfu-util:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/esp-rom-elfs/20230320:$PATH" >> $GITHUB_ENV
-        
-        # 设置编译器环境变量
-        echo "CC=$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
-        echo "CXX=$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
-        echo "CMAKE_MAKE_PROGRAM=$HOME/.espressif/tools/ninja/1.10.2/ninja" >> $GITHUB_ENV
 
     - name: Verify Build Tools
       run: |
@@ -136,18 +216,38 @@ jobs:
         fi
         
         # 检查关键工具
-        if [ -f "$HOME/.espressif/tools/ninja/1.10.2/ninja" ]; then
-          echo "Ninja found: $HOME/.espressif/tools/ninja/1.10.2/ninja"
-          $HOME/.espressif/tools/ninja/1.10.2/ninja --version
+        echo "=== Dynamic Tool Verification ==="
+        
+        # 查找 Ninja
+        NINJA_PATH=$(find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null | head -1)
+        if [ -n "$NINJA_PATH" ]; then
+          echo "Ninja found: $NINJA_PATH"
+          "$NINJA_PATH" --version
         else
-          echo "Ninja not found in expected location"
+          echo "Ninja not found"
         fi
         
-        if [ -f "$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc" ]; then
-          echo "ESP32-S3 compiler found"
-          $HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc --version | head -1
+        # 查找 ESP32-S3 编译器
+        ESP32S3_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
+        if [ -n "$ESP32S3_TOOLCHAIN" ]; then
+          ESP32S3_GCC="$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc"
+          if [ -f "$ESP32S3_GCC" ]; then
+            echo "ESP32-S3 compiler found: $ESP32S3_GCC"
+            "$ESP32S3_GCC" --version | head -1
+          else
+            echo "ESP32-S3 compiler not found in toolchain: $ESP32S3_TOOLCHAIN"
+          fi
         else
-          echo "ESP32-S3 compiler not found in expected location"
+          echo "ESP32-S3 toolchain not found"
+        fi
+        
+        # 查找任何 Xtensa 编译器
+        XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -1)
+        if [ -n "$XTENSA_TOOLCHAIN" ]; then
+          echo "Xtensa toolchain found: $XTENSA_TOOLCHAIN"
+          find "$XTENSA_TOOLCHAIN/bin" -name "*gcc" -type f 2>/dev/null | head -5
+        else
+          echo "No Xtensa toolchain found"
         fi
         echo "====================================="
 
@@ -208,11 +308,52 @@ jobs:
         # 手动设置关键环境变量以确保它们被正确设置
         export ESP_IDF_PATH="$HOME/esp/esp-idf"
         export IDF_TOOLS_PATH="$HOME/.espressif"
-        export PATH="$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin:$PATH"
-        export PATH="$HOME/.espressif/tools/ninja/1.10.2:$PATH"
-        export CC="$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc"
-        export CXX="$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-g++"
-        export CMAKE_MAKE_PROGRAM="$HOME/.espressif/tools/ninja/1.10.2/ninja"
+        
+        # 查找可用的 ESP32-S3 工具链
+        echo "=== Finding Available ESP32 Toolchains ==="
+        find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null || echo "No ESP32-S3 tools found"
+        find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null || echo "No Xtensa tools found"
+        
+        # 查找可用的编译器
+        echo "=== Finding Available Compilers ==="
+        find "$HOME/.espressif/tools" -name "*gcc" -type f 2>/dev/null || echo "No GCC found"
+        find "$HOME/.espressif/tools" -name "*g++" -type f 2>/dev/null || echo "No G++ found"
+        
+        # 查找可用的 Ninja
+        echo "=== Finding Available Ninja ==="
+        find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null || echo "No Ninja found"
+        
+        # 动态设置工具链路径
+        ESP32S3_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
+        if [ -n "$ESP32S3_TOOLCHAIN" ]; then
+          echo "Found ESP32-S3 toolchain: $ESP32S3_TOOLCHAIN"
+          export PATH="$ESP32S3_TOOLCHAIN/bin:$PATH"
+          export CC="$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc"
+          export CXX="$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++"
+        else
+          echo "ESP32-S3 toolchain not found, trying to find any Xtensa toolchain..."
+          XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -1)
+          if [ -n "$XTENSA_TOOLCHAIN" ]; then
+            echo "Found Xtensa toolchain: $XTENSA_TOOLCHAIN"
+            export PATH="$XTENSA_TOOLCHAIN/bin:$PATH"
+            export CC="$XTENSA_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc"
+            export CXX="$XTENSA_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++"
+          else
+            echo "No Xtensa toolchain found!"
+            exit 1
+          fi
+        fi
+        
+        # 设置 Ninja 路径
+        NINJA_PATH=$(find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null | head -1)
+        if [ -n "$NINJA_PATH" ]; then
+          echo "Found Ninja: $NINJA_PATH"
+          export PATH="$(dirname "$NINJA_PATH"):$PATH"
+          export CMAKE_MAKE_PROGRAM="$NINJA_PATH"
+        else
+          echo "Ninja not found!"
+          exit 1
+        fi
         
         # 显示环境变量
         echo "=== Environment Variables ==="
