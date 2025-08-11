@@ -1,0 +1,242 @@
+name: Build ESP32-S3 + W5500 nanoFramework Firmware
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
+      upload_artifacts:
+        description: 'Upload artifacts'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  ESP_IDF_VERSION: v5.2.3
+  NANOFRAMEWORK_VERSION: latest
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        build_type: [${{ github.event.inputs.build_type || 'Release' }}]
+        include:
+          - build_type: Release
+            cmake_build_type: MinSizeRel
+            rtm: ON
+            debugger: OFF
+          - build_type: Debug
+            cmake_build_type: Debug
+            rtm: OFF
+            debugger: ON
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        path: nanobuild-scripts
+
+    - name: Checkout nanoFramework
+      uses: actions/checkout@v4
+      with:
+        repository: nanoframework/nf-interpreter
+        path: nf-interpreter
+        submodules: recursive
+
+    - name: Setup Ubuntu Environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          git wget flex bison gperf python3 python3-pip \
+          python3-setuptools python3.12-venv cmake ninja-build ccache \
+          libffi-dev libssl-dev dfu-util libusb-1.0-0
+
+    - name: Cache ESP-IDF
+      uses: actions/cache@v3
+      id: cache-esp-idf
+      with:
+        path: ~/esp/esp-idf
+        key: ${{ runner.os }}-esp-idf-${{ env.ESP_IDF_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-esp-idf-
+
+    - name: Install ESP-IDF
+      if: steps.cache-esp-idf.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p ~/esp
+        cd ~/esp
+        git clone -b ${{ env.ESP_IDF_VERSION }} --recursive https://github.com/espressif/esp-idf.git
+        cd esp-idf
+        ./install.sh esp32s3
+
+    - name: Setup ESP-IDF Environment
+      run: |
+        echo "ESP_IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
+        echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+
+    - name: Configure CMake
+      run: |
+        cd nf-interpreter
+        mkdir -p build
+        cd build
+        
+        cmake .. \
+          -DTOOLCHAIN_PREFIX="xtensa-esp32s3-elf-" \
+          -DTARGET_BOARD=ESP32_S3 \
+          -DTARGET_SERIES=ESP32 \
+          -DRTOS=ESP32 \
+          -DNF_FEATURE_DEBUGGER=${{ matrix.debugger }} \
+          -DNF_FEATURE_RTC=ON \
+          -DNF_SECURITY_MBEDTLS=ON \
+          -DNF_BUILD_RTM=${{ matrix.rtm }} \
+          -DNF_WP_IMPLEMENTS_CRC32=OFF \
+          -DNF_FEATURE_HAS_SDCARD=ON \
+          -DNF_FEATURE_HAS_CONFIG_BLOCK=ON \
+          -DAPI_System.Device.Gpio=ON \
+          -DAPI_System.Device.Spi=ON \
+          -DAPI_System.Device.I2c=ON \
+          -DAPI_System.Device.Pwm=ON \
+          -DAPI_System.SerialCommunication=ON \
+          -DAPI_System.IO.FileSystem=ON \
+          -DAPI_Windows.Storage=ON \
+          -DAPI_Windows.Devices=ON \
+          -DAPI_System.Net=ON \
+          -DAPI_System.Net.NetworkInformation=ON \
+          -DAPI_System.Net.Sockets=ON \
+          -DAPI_System.Net.Http=ON \
+          -DAPI_System.Net.Security=ON \
+          -DAPI_nanoFramework.ResourceManager=ON \
+          -DAPI_nanoFramework.System.Collections=ON \
+          -DAPI_nanoFramework.System.Text=ON \
+          -DAPI_nanoFramework.Hardware.Esp32=ON \
+          -DAPI_nanoFramework.Networking=ON \
+          -DAPI_nanoFramework.Hardware.Esp32.Rmt=ON \
+          -DAPI_nanoFramework.System.IO.Streams=ON \
+          -DAPI_nanoFramework.Hardware.Esp32.Ble=ON \
+          -DAPI_nanoFramework.System.Net=ON \
+          -DAPI_nanoFramework.System.Net.Http=ON \
+          -DAPI_nanoFramework.System.Net.Sockets=ON \
+          -DAPI_nanoFramework.System.Net.Security=ON \
+          -DAPI_nanoFramework.System.Net.WebSockets=ON \
+          -DAPI_nanoFramework.System.Net.WebSockets.Client=ON \
+          -DSUPPORT_ANY_BASE_CONVERSION=ON \
+          -DNF_PLATFORM_NO_CLR_WARNINGS=ON \
+          -DCMAKE_BUILD_TYPE=${{ matrix.cmake_build_type }} \
+          -DESP32_IDF_PATH="$HOME/esp/esp-idf" \
+          -DESP32_ETHERNET_SUPPORT=ON \
+          -DESP32_ETHERNET_PHY="W5500" \
+          -DESP32_ETHERNET_SCLK_PIN="13" \
+          -DESP32_ETHERNET_MISO_PIN="12" \
+          -DESP32_ETHERNET_MOSI_PIN="11" \
+          -DESP32_ETHERNET_CS_PIN="14" \
+          -DESP32_ETHERNET_INT_PIN="10" \
+          -DESP32_ETHERNET_RESET_PIN="9"
+
+    - name: Build Firmware
+      run: |
+        cd nf-interpreter/build
+        cmake --build . --target ESP32_S3 -- -j$(nproc)
+
+    - name: Calculate Firmware Size
+      id: firmware_size
+      run: |
+        cd nf-interpreter/build
+        SIZE=$(stat -c%s nanoCLR.bin)
+        SIZE_MB=$(echo "scale=2; $SIZE/1024/1024" | bc)
+        echo "size=$SIZE" >> $GITHUB_OUTPUT
+        echo "size_mb=$SIZE_MB" >> $GITHUB_OUTPUT
+        echo "Firmware size: ${SIZE_MB}MB ($SIZE bytes)"
+
+    - name: Create Release Notes
+      run: |
+        cat > release-notes.md << EOF
+        # ESP32-S3 + W5500 nanoFramework Firmware
+        
+        ## Build Information
+        - **Build Type**: ${{ matrix.build_type }}
+        - **ESP-IDF Version**: ${{ env.ESP_IDF_VERSION }}
+        - **nanoFramework Version**: ${{ env.NANOFRAMEWORK_VERSION }}
+        - **Firmware Size**: ${{ steps.firmware_size.outputs.size_mb }}MB
+        - **Build Date**: $(date -u)
+        - **Commit**: ${{ github.sha }}
+        
+        ## Hardware Configuration
+        - **Target**: ESP32-S3
+        - **Ethernet**: W5500 SPI Module
+        - **SPI Pins**:
+          - SCLK: GPIO13
+          - MISO: GPIO12
+          - MOSI: GPIO11
+          - CS: GPIO14
+          - INT: GPIO10
+          - RST: GPIO9
+        
+        ## Features
+        $(if [ "${{ matrix.build_type }}" = "Release" ]; then
+          echo "- ✅ Production optimized (RTM enabled)"
+          echo "- ✅ Debugger disabled"
+          echo "- ✅ Size optimized"
+        else
+          echo "- ✅ Full debugging support"
+          echo "- ✅ Debug symbols included"
+          echo "- ✅ Visual Studio debugging"
+        fi)
+        
+        ## Usage
+        1. Flash the firmware using nanoFramework Flash Tool
+        2. Connect W5500 module according to pin configuration
+        3. Use nanoFramework Visual Studio extension for development
+        
+        ## Downloads
+        - Firmware: \`nanoCLR.bin\`
+        - Release notes: \`release-notes.md\`
+        EOF
+
+    - name: Upload Firmware Artifact
+      if: github.event.inputs.upload_artifacts != 'false'
+      uses: actions/upload-artifact@v4
+      with:
+        name: nanoFramework-ESP32S3-W5500-${{ matrix.build_type }}-${{ github.sha }}
+        path: |
+          nf-interpreter/build/nanoCLR.bin
+          nf-interpreter/build/nanoCLR.elf
+          release-notes.md
+        retention-days: 30
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/') && matrix.build_type == 'Release'
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ github.ref_name }}
+        body_path: release-notes.md
+        files: |
+          nf-interpreter/build/nanoCLR.bin
+          nf-interpreter/build/nanoCLR.elf
+          release-notes.md
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Release Asset
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: nf-interpreter/build/nanoCLR.bin
+        asset_name: nanoCLR-ESP32S3-W5500-${{ matrix.build_type }}-${{ github.ref_name }}.bin
+        asset_content_type: application/octet-stream

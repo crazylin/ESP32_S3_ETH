@@ -1,0 +1,68 @@
+name: Quick Build ESP32-S3 + W5500
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Checkout nanoFramework
+      uses: actions/checkout@v4
+      with:
+        repository: nanoframework/nf-interpreter
+        path: nf-interpreter
+        submodules: recursive
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git python3 python3-pip python3.12-venv cmake ninja-build
+
+    - name: Install ESP-IDF
+      run: |
+        mkdir -p ~/esp
+        cd ~/esp
+        git clone -b v5.2.3 --recursive https://github.com/espressif/esp-idf.git
+        cd esp-idf
+        ./install.sh esp32s3
+
+    - name: Build Firmware
+      run: |
+        cd nf-interpreter
+        mkdir -p build && cd build
+        
+        source ~/esp/esp-idf/export.sh
+        
+        cmake .. \
+          -DTOOLCHAIN_PREFIX="xtensa-esp32s3-elf-" \
+          -DTARGET_BOARD=ESP32_S3 \
+          -DTARGET_SERIES=ESP32 \
+          -DRTOS=ESP32 \
+          -DNF_FEATURE_DEBUGGER=ON \
+          -DNF_BUILD_RTM=OFF \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DESP32_IDF_PATH="$HOME/esp/esp-idf" \
+          -DESP32_ETHERNET_SUPPORT=ON \
+          -DESP32_ETHERNET_PHY="W5500" \
+          -DESP32_ETHERNET_SCLK_PIN="13" \
+          -DESP32_ETHERNET_MISO_PIN="12" \
+          -DESP32_ETHERNET_MOSI_PIN="11" \
+          -DESP32_ETHERNET_CS_PIN="14" \
+          -DESP32_ETHERNET_INT_PIN="10" \
+          -DESP32_ETHERNET_RESET_PIN="9"
+        
+        cmake --build . --target ESP32_S3 -- -j$(nproc)
+
+    - name: Upload Firmware
+      uses: actions/upload-artifact@v4
+      with:
+        name: nanoCLR-ESP32S3-W5500-${{ github.sha }}
+        path: nf-interpreter/build/nanoCLR.bin
+        retention-days: 7
