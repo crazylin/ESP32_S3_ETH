@@ -85,7 +85,11 @@ jobs:
         echo "ESP_IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
 
-    - name: Configure CMake
+    - name: Copy Custom CMake Presets
+      run: |
+        cp nanobuild-scripts/CMakePresets-W5500.json nf-interpreter/CMakePresets.json
+
+    - name: Configure CMake with Preset
       run: |
         cd nf-interpreter
         mkdir -p build
@@ -93,63 +97,17 @@ jobs:
         
         source ~/esp/esp-idf/export.sh
         
-        cmake .. \
-          -DTOOLCHAIN_PREFIX="xtensa-esp32s3-elf-" \
-          -DTARGET_BOARD=ESP32_S3 \
-          -DTARGET_SERIES=ESP32 \
-          -DRTOS=ESP32 \
-          -DNF_FEATURE_DEBUGGER=${{ matrix.debugger }} \
-          -DNF_FEATURE_RTC=ON \
-          -DNF_SECURITY_MBEDTLS=ON \
-          -DNF_BUILD_RTM=${{ matrix.rtm }} \
-          -DNF_WP_IMPLEMENTS_CRC32=OFF \
-          -DNF_FEATURE_HAS_SDCARD=ON \
-          -DNF_FEATURE_HAS_CONFIG_BLOCK=ON \
-          -DAPI_System.Device.Gpio=ON \
-          -DAPI_System.Device.Spi=ON \
-          -DAPI_System.Device.I2c=ON \
-          -DAPI_System.Device.Pwm=ON \
-          -DAPI_System.SerialCommunication=ON \
-          -DAPI_System.IO.FileSystem=ON \
-          -DAPI_Windows.Storage=ON \
-          -DAPI_Windows.Devices=ON \
-          -DAPI_System.Net=ON \
-          -DAPI_System.Net.NetworkInformation=ON \
-          -DAPI_System.Net.Sockets=ON \
-          -DAPI_System.Net.Http=ON \
-          -DAPI_System.Net.Security=ON \
-          -DAPI_nanoFramework.ResourceManager=ON \
-          -DAPI_nanoFramework.System.Collections=ON \
-          -DAPI_nanoFramework.System.Text=ON \
-          -DAPI_nanoFramework.Hardware.Esp32=ON \
-          -DAPI_nanoFramework.Networking=ON \
-          -DAPI_nanoFramework.Hardware.Esp32.Rmt=ON \
-          -DAPI_nanoFramework.System.IO.Streams=ON \
-          -DAPI_nanoFramework.Hardware.Esp32.Ble=ON \
-          -DAPI_nanoFramework.System.Net=ON \
-          -DAPI_nanoFramework.System.Net.Http=ON \
-          -DAPI_nanoFramework.System.Net.Sockets=ON \
-          -DAPI_nanoFramework.System.Net.Security=ON \
-          -DAPI_nanoFramework.System.Net.WebSockets=ON \
-          -DAPI_nanoFramework.System.Net.WebSockets.Client=ON \
-          -DSUPPORT_ANY_BASE_CONVERSION=ON \
-          -DNF_PLATFORM_NO_CLR_WARNINGS=ON \
-          -DCMAKE_BUILD_TYPE=${{ matrix.cmake_build_type }} \
-          -DCMAKE_TOOLCHAIN_FILE="$HOME/esp/esp-idf/tools/cmake/toolchain-esp32s3.cmake" \
-          -DESP32_IDF_PATH="$HOME/esp/esp-idf" \
-          -DESP32_ETHERNET_SUPPORT=ON \
-          -DESP32_ETHERNET_PHY="W5500" \
-          -DESP32_ETHERNET_SCLK_PIN="13" \
-          -DESP32_ETHERNET_MISO_PIN="12" \
-          -DESP32_ETHERNET_MOSI_PIN="11" \
-          -DESP32_ETHERNET_CS_PIN="14" \
-          -DESP32_ETHERNET_INT_PIN="10" \
-          -DESP32_ETHERNET_RESET_PIN="9"
+        # 使用自定义预设，根据构建类型选择
+        if [ "${{ matrix.build_type }}" = "Release" ]; then
+          cmake --preset ESP32_S3_W5500_Release
+        else
+          cmake --preset ESP32_S3_W5500_Debug
+        fi
 
     - name: Build Firmware
       run: |
         cd nf-interpreter/build
-        cmake --build . --target nanoCLR -- -j$(nproc)
+        cmake --build . -- -j$(nproc)
 
     - name: Calculate Firmware Size
       id: firmware_size
@@ -213,6 +171,7 @@ jobs:
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/') && matrix.build_type == 'Release'
+      id: create_release
       uses: softprops/action-gh-release@v1
       with:
         name: Release ${{ github.ref_name }}

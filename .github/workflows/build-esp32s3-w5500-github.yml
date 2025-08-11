@@ -1,0 +1,131 @@
+name: Build ESP32-S3 + W5500 nanoFramework
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'CMakePresets-W5500.json'
+      - '.github/workflows/build-esp32s3-w5500-github.yml'
+      - 'src/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'CMakePresets-W5500.json'
+      - '.github/workflows/build-esp32s3-w5500-github.yml'
+      - 'src/**'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        build_type: [Release, Debug]
+        include:
+          - build_type: Release
+            cmake_build_type: MinSizeRel
+            debugger: OFF
+            rtm: ON
+          - build_type: Debug
+            cmake_build_type: Debug
+            debugger: ON
+            rtm: OFF
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install ESP-IDF
+      run: |
+        git clone --recursive https://github.com/espressif/esp-idf.git
+        cd esp-idf
+        ./install.sh esp32s3
+        . $HOME/esp/esp-idf/export.sh
+
+    - name: Setup ESP-IDF Environment
+      run: |
+        echo "ESP_IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
+        echo "$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+
+    - name: Clone nanoFramework
+      run: |
+        git clone --recursive https://github.com/nanoframework/nf-interpreter.git
+        cd nf-interpreter
+
+    - name: Copy Custom CMake Presets
+      run: |
+        cp ../CMakePresets-W5500.json CMakePresets.json
+
+    - name: Configure CMake with Custom Preset
+      run: |
+        cd nf-interpreter
+        mkdir -p build
+        cd build
+        
+        source ~/esp/esp-idf/export.sh
+        
+        # 使用自定义预设，根据构建类型选择
+        if [ "${{ matrix.build_type }}" = "Release" ]; then
+          cmake --preset ESP32_S3_W5500_Release
+        else
+          cmake --preset ESP32_S3_W5500_Debug
+        fi
+
+    - name: Build Firmware
+      run: |
+        cd nf-interpreter/build
+        source ~/esp/esp-idf/export.sh
+        cmake --build . -- -j$(nproc)
+
+    - name: Check Build Artifacts
+      run: |
+        cd nf-interpreter/build
+        ls -la *.bin
+        if [ -f "nanoCLR.bin" ]; then
+          echo "Build successful! Firmware size: $(stat -c%s nanoCLR.bin) bytes"
+        else
+          echo "Build failed - nanoCLR.bin not found"
+          exit 1
+        fi
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ESP32-S3-W5500-${{ matrix.build_type }}
+        path: nf-interpreter/build/*.bin
+        retention-days: 30
+
+    - name: Build Summary
+      run: |
+        echo "## Build Summary for ESP32-S3 + W5500" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Type:** ${{ matrix.build_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **CMake Build Type:** ${{ matrix.cmake_build_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Debugger:** ${{ matrix.debugger }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **RTM:** ${{ matrix.rtm }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### W5500 Ethernet Configuration:" >> $GITHUB_STEP_SUMMARY
+        echo "- **PHY:** W5500" >> $GITHUB_STEP_SUMMARY
+        echo "- **SCLK Pin:** 13" >> $GITHUB_STEP_SUMMARY
+        echo "- **MISO Pin:** 12" >> $GITHUB_STEP_SUMMARY
+        echo "- **MOSI Pin:** 11" >> $GITHUB_STEP_SUMMARY
+        echo "- **CS Pin:** 14" >> $GITHUB_STEP_SUMMARY
+        echo "- **INT Pin:** 10" >> $GITHUB_STEP_SUMMARY
+        echo "- **Reset Pin:** 9" >> $GITHUB_STEP_SUMMARY
