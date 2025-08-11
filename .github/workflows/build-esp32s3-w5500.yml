@@ -60,7 +60,9 @@ jobs:
         sudo apt-get install -y \
           git wget flex bison gperf python3 python3-pip \
           python3-setuptools python3.12-venv cmake ninja-build ccache \
-          libffi-dev libssl-dev dfu-util libusb-1.0-0
+          libffi-dev libssl-dev dfu-util libusb-1.0-0 \
+          build-essential gcc g++ gcc-multilib g++-multilib \
+          pkg-config autoconf automake libtool
 
     - name: Cache ESP-IDF
       uses: actions/cache@v3
@@ -84,6 +86,34 @@ jobs:
       run: |
         echo "ESP_IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+        
+        # 设置 ESP-IDF 工具链环境变量
+        echo "IDF_TOOLS_PATH=$HOME/.espressif" >> $GITHUB_ENV
+        echo "IDF_PYTHON_ENV_PATH=$HOME/.espressif/python_env/idf5.2_py3.12_env" >> $GITHUB_ENV
+        
+        # 确保工具链在 PATH 中
+        echo "PATH=$HOME/.espressif/tools/xtensa-esp32s3-elf/esp-12.2.0_20230208/xtensa-esp32s3-elf/bin:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/riscv32-esp-elf/esp-12.2.0_20230208/riscv32-esp-elf/bin:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/esp32ulp-elf/2.35_20220830/esp32ulp-elf/bin:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/cmake/3.24.0/bin:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/openocd-esp32/v0.12.0-esp32-20230419/openocd-esp32/bin:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/ninja/1.10.2:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/idf-exe/1.0.3:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/ccache/4.8/ccache-4.8-linux-x86_64:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/dfu-util/0.11/dfu-util-0.11/dfu-util:$PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.espressif/tools/esp-rom-elfs/20230320:$PATH" >> $GITHUB_ENV
+
+    - name: Verify Build Tools
+      run: |
+        echo "=== Build Tools Verification ==="
+        echo "CMake version: $(cmake --version)"
+        echo "Ninja version: $(ninja --version)"
+        echo "GCC version: $(gcc --version | head -1)"
+        echo "G++ version: $(g++ --version | head -1)"
+        echo "Python version: $(python3 --version)"
+        echo "ESP_IDF_PATH: $ESP_IDF_PATH"
+        echo "PATH: $PATH"
+        echo "================================"
 
     - name: Copy Custom CMake Presets
       run: |
@@ -94,13 +124,40 @@ jobs:
         cd nf-interpreter
         mkdir -p build
         
+        # 设置 ESP-IDF 环境
         source ~/esp/esp-idf/export.sh
+        
+        # 显示环境变量
+        echo "=== Environment Variables ==="
+        echo "ESP_IDF_PATH: $ESP_IDF_PATH"
+        echo "PATH: $PATH"
+        echo "CC: $CC"
+        echo "CXX: $CXX"
+        echo "============================"
         
         # 使用自定义预设，根据构建类型选择
         if [ "${{ matrix.build_type }}" = "Release" ]; then
-          cmake --preset ESP32_S3_W5500_Release
+          echo "Configuring with ESP32_S3_W5500_Release preset..."
+          cmake --preset ESP32_S3_W5500_Release -DCMAKE_VERBOSE_MAKEFILE=ON
         else
-          cmake --preset ESP32_S3_W5500_Debug
+          echo "Configuring with ESP32_S3_W5500_Debug preset..."
+          cmake --preset ESP32_S3_W5500_Debug -DCMAKE_VERBOSE_MAKEFILE=ON
+        fi
+        
+        # 显示 CMake 缓存
+        echo "=== CMake Cache Contents ==="
+        cat build/CMakeCache.txt | grep -E "(CMAKE_C_COMPILER|CMAKE_CXX_COMPILER|CMAKE_MAKE_PROGRAM|ESP_IDF_PATH)" || true
+        echo "============================"
+        
+        # 如果配置失败，显示更多诊断信息
+        if [ $? -ne 0 ]; then
+          echo "=== CMake Configuration Failed ==="
+          echo "Available presets:"
+          cmake --list-presets || true
+          echo "Available generators:"
+          cmake --help | grep -A 20 "Generators" || true
+          echo "================================"
+          exit 1
         fi
 
     - name: Build Firmware
