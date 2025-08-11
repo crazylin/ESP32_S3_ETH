@@ -60,11 +60,13 @@ jobs:
           -DESP32_ETHERNET_INT_PIN="10" \
           -DESP32_ETHERNET_RESET_PIN="9"
         
-        cmake --build . --target ESP32_S3 -- -j$(nproc)
+        cmake --build . --target nanoCLR -- -j$(nproc)
 
     - name: Upload Firmware
       uses: actions/upload-artifact@v4
       with:
         name: nanoCLR-ESP32S3-W5500-${{ github.sha }}
-        path: nf-interpreter/build/nanoCLR.bin
+        path: |
+          nf-interpreter/build/nanoCLR.bin
+          nf-interpreter/build/nanoCLR.elf
         retention-days: 7
