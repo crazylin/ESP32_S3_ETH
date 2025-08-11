@@ -58,8 +58,8 @@
         "ESP32_ETHERNET_RESET_PIN": "9"
       },
       "environment": {
-        "ESP_IDF_PATH": "$env{ESP_IDF_PATH}",
-        "PATH": "$env{PATH}"
+        "ESP_IDF_PATH": "$ENV{ESP_IDF_PATH}",
+        "PATH": "$ENV{PATH}"
       }
     },
     {
@@ -119,8 +119,8 @@
         "ESP32_ETHERNET_RESET_PIN": "9"
       },
       "environment": {
-        "ESP_IDF_PATH": "$env{ESP_IDF_PATH}",
-        "PATH": "$env{PATH}"
+        "ESP_IDF_PATH": "$ENV{ESP_IDF_PATH}",
+        "PATH": "$ENV{PATH}"
       }
     }
   ],
