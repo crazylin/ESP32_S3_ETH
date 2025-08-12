@@ -208,15 +208,8 @@ jobs:
     - name: Configure CMake (with cache)
       working-directory: nf-interpreter
       run: |
-        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
-        unset IDF_PATH
-        source ~/esp/esp-idf/export.sh
-        
-        # Configure build using CMake presets
-        cmake --preset ESP32_S3_W5500_${{ matrix.build_type }}
-        
-        # Build the firmware
-        cmake --build --preset ESP32_S3_W5500_${{ matrix.build_type }} --target nanoCLR
+        chmod +x ../build-esp32-s3-w5500.sh
+        ../build-esp32-s3-w5500.sh ${{ matrix.build_type }}
 
     - name: Build Firmware (with ccache)
       working-directory: nf-interpreter

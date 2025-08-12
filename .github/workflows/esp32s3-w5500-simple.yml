@@ -77,18 +77,10 @@ jobs:
           -S .
 
     - name: Build firmware
-      run: |
-        cd nf-interpreter
-        
-        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
-        unset IDF_PATH
-        
-        # Copy the CMake presets file to nf-interpreter directory
-        cp ../CMakePresets-W5500.json CMakePresets.json
-        
-        # Configure and build using CMake presets
-        cmake --preset ESP32_S3_W5500_Release
-        cmake --build --preset ESP32_S3_W5500_Release --target nanoCLR
+        run: |
+          cd nf-interpreter
+          chmod +x ../build-esp32-s3-w5500.sh
+          ../build-esp32-s3-w5500.sh
         
         # Check if build was successful
         if [ -f "build/nanoCLR.bin" ]; then

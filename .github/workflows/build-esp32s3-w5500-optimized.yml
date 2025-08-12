@@ -203,41 +203,15 @@ jobs:
         # Copy target configuration
         cp nanobuild-scripts/CMakePresets-W5500.json nf-interpreter/CMakePresets.json
 
-    - name: Configure CMake (with ccache)
+    - name: Build nanoFramework firmware
       working-directory: nf-interpreter
       run: |
-        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
-        unset IDF_PATH
-        
-        source ~/esp/esp-idf/export.sh
-        
-        # Show ccache stats before build
-        ccache --show-stats
-        
-        # Configure build using CMake presets
-        cmake --preset ESP32_S3_W5500_${{ matrix.build_type }} -B build
-        
-        # Build the firmware
-        cmake --build build --target all --config ${{ matrix.cmake_build_type }}
+        chmod +x ../build-esp32-s3-w5500.sh
+        ../build-esp32-s3-w5500.sh ${{ matrix.build_type }}
 
-    - name: Build Firmware (with ccache)
+    - name: Package Firmware
       working-directory: nf-interpreter
       run: |
-        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
-        unset IDF_PATH
-        
-        source ~/esp/esp-idf/export.sh
-        
-        # Show ccache stats before build
-        ccache --show-stats
-        
-        # Build the firmware
-        cmake --build build --target all --config ${{ matrix.cmake_build_type }}
-        
-        # Show final ccache stats
-        ccache --show-stats
-        
-        # Create firmware package
         cd build
         
         # Generate binary files
