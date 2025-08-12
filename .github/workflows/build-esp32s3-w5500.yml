@@ -571,8 +571,40 @@ jobs:
             echo "ESP32S3_TOOLCHAIN_PATH=$ESP32S3_TOOLCHAIN" >> $GITHUB_ENV
           else
             echo "ESP32-S3 toolchain not found, trying to find any Xtensa toolchain..."
-            # 查找 Xtensa 工具链，但确保找到的是根目录而不是子目录
-            XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | grep -v "/include/" | grep -v "/lib/" | head -1)
+            echo "Debug: Searching for Xtensa toolchain..."
+            
+            # 使用更精确的路径匹配，避免找到子目录
+            XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -maxdepth 2 -name "*xtensa*" -type d 2>/dev/null | grep -E "/xtensa-esp-elf$|/xtensa-esp32s3-elf$" | head -1)
+            echo "Debug: First search result: $XTENSA_TOOLCHAIN"
+            
+            if [ -z "$XTENSA_TOOLCHAIN" ]; then
+              echo "Debug: First search failed, trying fallback search..."
+              # 如果没找到，尝试更宽松的搜索但排除明显的子目录
+              XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | grep -v "/include/" | grep -v "/lib/" | grep -v "/share/" | grep -v "/sys-root/" | head -1)
+              echo "Debug: Fallback search result: $XTENSA_TOOLCHAIN"
+            fi
+            
+            # 验证找到的路径是否包含 bin 目录
+            if [ -n "$XTENSA_TOOLCHAIN" ] && [ -d "$XTENSA_TOOLCHAIN/bin" ]; then
+              echo "Debug: Found toolchain with bin directory: $XTENSA_TOOLCHAIN"
+            elif [ -n "$XTENSA_TOOLCHAIN" ]; then
+              echo "Debug: Found toolchain but no bin directory: $XTENSA_TOOLCHAIN"
+              echo "Debug: Contents of found directory:"
+              ls -la "$XTENSA_TOOLCHAIN" 2>/dev/null || echo "Cannot list directory contents"
+              # 继续搜索，这个路径可能不正确
+              XTENSA_TOOLCHAIN=""
+            fi
+            
+            # 如果还是没找到，尝试通过查找 gcc 编译器来定位工具链根目录
+            if [ -z "$XTENSA_TOOLCHAIN" ]; then
+              echo "Debug: Trying to find toolchain by locating gcc compiler..."
+              GCC_PATH=$(find "$HOME/.espressif/tools" -name "xtensa-esp-elf-gcc" -type f 2>/dev/null | head -1)
+              if [ -n "$GCC_PATH" ]; then
+                XTENSA_TOOLCHAIN=$(dirname "$(dirname "$GCC_PATH")")
+                echo "Debug: Found toolchain via gcc: $XTENSA_TOOLCHAIN"
+              fi
+            fi
+            
             if [ -n "$XTENSA_TOOLCHAIN" ]; then
               echo "Found Xtensa toolchain: $XTENSA_TOOLCHAIN"
               echo "PATH=$XTENSA_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
@@ -581,6 +613,8 @@ jobs:
               echo "ESP32S3_TOOLCHAIN_PATH=$XTENSA_TOOLCHAIN" >> $GITHUB_ENV
             else
               echo "No Xtensa toolchain found!"
+              echo "Debug: All search methods failed. Available xtensa directories:"
+              find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -10
               exit 1
             fi
           fi
@@ -598,6 +632,10 @@ jobs:
         elif [ -f "$HOME/.espressif/tools/ninja/1.10.2/ninja" ]; then
           NINJA_PATH="$HOME/.espressif/tools/ninja/1.10.2/ninja"
           echo "Found Ninja in .espressif tools: $NINJA_PATH"
+        # 检查 ESP-IDF 工具目录下的子目录
+        elif [ -f "$HOME/esp/esp-idf/tools/cmake/ninja" ]; then
+          NINJA_PATH="$HOME/esp/esp-idf/tools/cmake/ninja"
+          echo "Found Ninja in ESP-IDF cmake tools: $NINJA_PATH"
         # 最后尝试 find 命令
         else
           NINJA_PATH=$(find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null | head -1)
@@ -617,6 +655,10 @@ jobs:
           find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null || echo "No ninja files found"
           echo "Checking ESP-IDF tools:"
           ls -la "$HOME/esp/esp-idf/tools/" 2>/dev/null || echo "ESP-IDF tools directory not accessible"
+          echo "Checking ESP-IDF cmake tools:"
+          ls -la "$HOME/esp/esp-idf/tools/cmake/" 2>/dev/null || echo "ESP-IDF cmake tools directory not accessible"
+          echo "Searching for ninja in ESP-IDF tools recursively:"
+          find "$HOME/esp/esp-idf/tools" -name "ninja" -type f 2>/dev/null || echo "No ninja found in ESP-IDF tools"
           exit 1
         fi
         
