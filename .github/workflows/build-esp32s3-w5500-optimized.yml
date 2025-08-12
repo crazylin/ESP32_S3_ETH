@@ -252,17 +252,12 @@ jobs:
       if: github.event.inputs.upload_artifacts != 'false'
       uses: actions/upload-artifact@v4
       with:
-        name: ESP32-S3-W5500-nanoFramework-${{ matrix.build_type }}-${{ github.sha }}
+        name: ESP32-S3-W5500-${{ matrix.build_type }}-${{ github.sha }}
         path: |
           nf-interpreter/build/nanoCLR.bin
           nf-interpreter/build/nanoCLR.elf
-          nf-interpreter/build/nanoBooter.bin
-          nf-interpreter/build/nanoBooter.elf
-          nf-interpreter/build/partitions.bin
           nf-interpreter/build/bootloader/bootloader.bin
-          nf-interpreter/build/*.map
-          nf-interpreter/build/*.hex
-          nf-interpreter/build/*.dfu
+          nf-interpreter/build/partitions.bin
         retention-days: 30
 
     - name: Create Release

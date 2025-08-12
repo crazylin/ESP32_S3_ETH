@@ -76,17 +76,33 @@ jobs:
           -B build \
           -S .
 
-    - name: Build Firmware
+    - name: Build firmware
       run: |
-        source $HOME/esp/esp-idf/export.sh
         cd nf-interpreter
-        cmake --build build --config MinSizeRel
+        
+        # Copy the CMake presets file to nf-interpreter directory
+        cp ../CMakePresets-W5500.json CMakePresets.json
+        
+        # Configure and build using CMake presets
+        cmake --preset ESP32_S3_W5500_Release
+        cmake --build --preset ESP32_S3_W5500_Release --target nanoCLR
+        
+        # Check if build was successful
+        if [ -f "build/nanoCLR.bin" ]; then
+          echo "✅ nanoCLR.bin built successfully"
+          ls -la build/nanoCLR*
+        else
+          echo "❌ Build failed - nanoCLR.bin not found"
+          exit 1
+        fi
 
     - name: Upload Firmware
       uses: actions/upload-artifact@v4
       with:
-        name: ESP32-S3-W5500-firmware
+        name: ESP32-S3-W5500-nanoCLR
         path: |
           nf-interpreter/build/nanoCLR.bin
           nf-interpreter/build/nanoCLR.elf
+          nf-interpreter/build/partitions.bin
+          nf-interpreter/build/bootloader/bootloader.bin
         retention-days: 7
