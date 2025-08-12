@@ -45,11 +45,29 @@
 - **修复**: 使用正确的ESP-IDF requirements路径: `C:\esp\esp-idf\tools\requirements\requirements.core.txt`
 - **验证**: 工作流成功安装所有Python依赖
 
-#### 4. Windows构建环境支持 ✅
+#### 4. Windows构建环境支持
 - **问题**: 原工作流仅支持Ubuntu环境
 - **症状**: 无法在Windows主机上构建
 - **修复**: 创建Windows专用工作流和构建指南
 - **验证**: 支持Windows 10/11 + ESP-IDF v5.2.3构建环境
+
+#### 5. ESP32-S3工具链缺失问题 ✅
+- **问题**: Windows构建中缺少ESP32-S3工具链(xtensa-esp32s3-elf-gcc)
+- **症状**: GitHub Actions Windows构建失败，提示找不到xtensa-esp32s3-elf工具链路径
+- **修复**: 
+  - 添加ESP-IDF工具安装步骤(使用`install.bat esp32s3`)
+  - 简化环境配置，依赖ESP-IDF的export脚本自动配置工具链
+  - 创建专用工具链安装验证脚本(`install-esp32-s3-toolchain.ps1`)
+- **验证**: 工作流成功识别并使用ESP32-S3工具链进行构建
+
+#### 6. CMake配置路径问题 ✅
+- **问题**: CMake使用Linux路径配置，在Windows上找不到工具链文件
+- **症状**: `Could not find toolchain file: /home/runner/esp/esp-idf/tools/cmake/toolchain-esp32s3.cmake`
+- **修复**: 
+  - 创建Windows专用CMake预设文件`CMakePresets-W5500-Windows.json`
+  - 更新路径配置：使用`C:/esp/esp-idf`替代`/home/runner/esp/esp-idf`
+  - 修改工作流使用Windows版本预设文件
+- **验证**: CMake配置步骤正确识别Windows路径
 
 ### 构建预设配置
 

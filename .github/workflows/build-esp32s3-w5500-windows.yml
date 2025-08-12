@@ -189,7 +189,8 @@ jobs:
     - name: Copy Custom CMake Presets
       shell: pwsh
       run: |
-        Copy-Item -Path "nanobuild-scripts\CMakePresets-W5500.json" -Destination "nf-interpreter\CMakePresets.json" -Force
+        # 复制Windows版本的CMake预设
+        Copy-Item -Path "nanobuild-scripts\CMakePresets-W5500-Windows.json" -Destination "nf-interpreter\CMakePresets.json" -Force
         
     - name: Apply CMake Patches
       shell: pwsh
@@ -210,11 +211,11 @@ jobs:
       run: |
         cd nf-interpreter
         
-        # 加载ESP-IDF环境
+        # 设置ESP-IDF环境变量
         $env:IDF_PATH = "C:\esp\esp-idf"
         $env:IDF_TOOLS_PATH = "C:\Espressif"
         
-        # 导出ESP-IDF环境（包含工具链路径）
+        # 导出ESP-IDF环境（包含所有工具链和构建工具）
         $exportScript = "$env:IDF_PATH\export.ps1"
         if (Test-Path $exportScript) {
             . $exportScript
@@ -223,28 +224,74 @@ jobs:
             exit 1
         }
         
-        # 验证工具
-        Write-Host "=== Tool Verification ==="
-        Write-Host "Python: $(python --version)"
-        Write-Host "CMake: $(cmake --version)"
-        Write-Host "Ninja: $(ninja --version)"
+        # 验证所有必需工具
+        Write-Host "=== Tool Verification ===" -ForegroundColor Yellow
+        
+        # 验证Python
+        Write-Host "Python: $(python --version)" -ForegroundColor Cyan
+        
+        # 验证CMake
+        $cmakeVersion = cmake --version
+        Write-Host "CMake: $($cmakeVersion[0])" -ForegroundColor Cyan
+        
+        # 验证Ninja
+        $ninjaVersion = ninja --version 2>$null
+        if ($ninjaVersion) {
+            Write-Host "Ninja: $ninjaVersion" -ForegroundColor Green
+        } else {
+            Write-Host "❌ Ninja not found, installing..." -ForegroundColor Red
+            choco install ninja -y
+        }
         
         # 验证ESP32-S3工具链
         $xtensaGcc = Get-Command "xtensa-esp32s3-elf-gcc" -ErrorAction SilentlyContinue
         if ($xtensaGcc) {
-            Write-Host "✅ Xtensa GCC: $(xtensa-esp32s3-elf-gcc --version | Select-Object -First 1)" -ForegroundColor Green
+            $gccVersion = & xtensa-esp32s3-elf-gcc --version 2>$null
+            Write-Host "✅ Xtensa GCC: $($gccVersion[0])" -ForegroundColor Green
         } else {
-            Write-Host "❌ ESP32-S3 toolchain not found in PATH" -ForegroundColor Red
+            Write-Host "❌ ESP32-S3 toolchain not found" -ForegroundColor Red
             exit 1
         }
         
-        # 配置构建
+        # 验证ESP-IDF工具链文件
+        $toolchainFile = "$env:IDF_PATH\tools\cmake\toolchain-esp32s3.cmake"
+        if (Test-Path $toolchainFile) {
+            Write-Host "✅ ESP32-S3 toolchain file: $toolchainFile" -ForegroundColor Green
+        } else {
+            Write-Host "❌ ESP32-S3 toolchain file not found: $toolchainFile" -ForegroundColor Red
+            exit 1
+        }
+        
+        # 设置ESP-IDF CMake环境变量
+        $env:ESP_PLATFORM = "ESP32"
+        $env:ESP_IDF_VERSION = "v5.2.3"
+        
+        # 使用ESP-IDF的idf.py工具配置CMake
+        Write-Host "=== Configuring CMake with ESP-IDF ===" -ForegroundColor Yellow
+        
+        # 确保构建目录存在
+        $buildDir = "build"
+        if (-not (Test-Path $buildDir)) {
+            New-Item -ItemType Directory -Path $buildDir -Force
+        }
+        
+        # 根据构建类型配置
         if ("${{ matrix.build_type }}" -eq "Release") {
-            Write-Host "Configuring Release build..."
+            Write-Host "Configuring Release build..." -ForegroundColor Green
+            # 使用CMake预设
             cmake --preset ESP32_S3_W5500_Release
         } else {
-            Write-Host "Configuring Debug build..."
+            Write-Host "Configuring Debug build..." -ForegroundColor Green
+            # 使用CMake预设
             cmake --preset ESP32_S3_W5500_Debug
+        }
+        
+        # 验证构建配置
+        if (Test-Path "$buildDir\CMakeCache.txt") {
+            Write-Host "✅ CMake configuration completed successfully" -ForegroundColor Green
+        } else {
+            Write-Host "❌ CMake configuration failed" -ForegroundColor Red
+            exit 1
         }
 
     - name: Build Firmware
