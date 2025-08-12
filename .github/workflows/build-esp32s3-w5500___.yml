@@ -1,4 +1,4 @@
-name: Build .NET nanoFramework for ESP32-S3
+name: Build nanoFramework ESP32-S3 Firmware
 
 on:
   push:
@@ -14,29 +14,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.7
+      - name: Setup Python 3.6
         uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
-      
+          python-version: '3.6'
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build gperf ccache dfu-util wget python3-serial
+          sudo apt-get install -y \
+            git wget flex bison gperf python3-pip python3-setuptools cmake ninja-build ccache libffi-dev libssl-dev dfu-util
+          python3 -m pip install --upgrade pip
+
+      - name: Install ESP-IDF v5.0 (stable)
+        run: |
+          mkdir -p $HOME/esp
+          cd $HOME/esp
+          wget https://github.com/espressif/esp-idf/releases/download/v5.0/esp-idf-v5.0.zip
+          unzip esp-idf-v5.0.zip
+          rm esp-idf-v5.0.zip
+          cd esp-idf-v5.0
+          ./install.sh
+        shell: bash
+
+      - name: Export ESP-IDF environment variables
+        run: echo "source $HOME/esp/esp-idf-v5.0/export.sh" >> $GITHUB_ENV
 
       - name: Clone nf-interpreter repository
         run: |
           git clone --recursive https://github.com/nanoframework/nf-interpreter.git
-          cd nf-interpreter
-          git submodule update --init --recursive
 
-      - name: Set up ESP-IDF
+      - name: Build nanoFramework firmware for ESP32_S3
+        env:
+          IDF_PATH: $HOME/esp/esp-idf-v5.0
         run: |
           cd nf-interpreter
-          ./tools/install-esp-idf.sh
-
-      - name: Build firmware for ESP32-S3
-        run: |
-          cd nf-interpreter
+          source $HOME/esp/esp-idf-v5.0/export.sh
           ./build.sh ESP32_S3
