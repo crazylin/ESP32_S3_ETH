@@ -83,7 +83,7 @@ jobs:
     - name: Setup Cache Keys
       id: cache-keys
       run: |
-        echo "esp_idf_key=${{ runner.os }}-esp-idf-${{ env.ESP_IDF_VERSION }}" >> $GITHUB_OUTPUT
+        echo "esp_idf_key=${{ runner.os }}-esp-idf-${{ env.ESP_IDF_VERSION }}-${{ hashFiles('**/requirements.txt') }}" >> $GITHUB_OUTPUT
         echo "ccache_key=${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ github.sha }}" >> $GITHUB_OUTPUT
         echo "build_key=${{ runner.os }}-build-${{ matrix.build_type }}-${{ hashFiles('nf-interpreter/CMakeLists.txt', 'nf-interpreter/targets/ESP32/**') }}" >> $GITHUB_OUTPUT
 
@@ -92,9 +92,12 @@ jobs:
       id: cache-esp-idf
       with:
         path: |
-          ~/esp
+          ~/esp/esp-idf
           ~/.espressif
-          ~/cache/esp32
+          ~/.cache/esp32
+          ~/.espressif/python_env
+          ~/.espressif/tools
+          ~/.espressif/dist
         key: ${{ steps.cache-keys.outputs.esp_idf_key }}
         restore-keys: |
           ${{ runner.os }}-esp-idf-
@@ -162,6 +165,14 @@ jobs:
         # Verify installation
         echo "ESP-IDF Version: $(idf.py --version)"
         echo "ESP32-S3 Toolchain: $(xtensa-esp32s3-elf-gcc --version | head -1)"
+        
+    - name: Setup ESP-IDF (if cached)
+      if: steps.cache-esp-idf.outputs.cache-hit == 'true'
+      run: |
+        echo "ESP-IDF found in cache, setting up environment..."
+        source ~/esp/esp-idf/export.sh
+        echo "ESP-IDF Version: $(idf.py --version)"
+        echo "ESP32-S3 Toolchain: $(xtensa-esp32s3-elf-gcc --version | head -1)"
 
     - name: Verify ESP-IDF Installation
       run: |
@@ -169,12 +180,12 @@ jobs:
         echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
         
-        # Ensure Python packages are properly installed in ESP-IDF environment
-        python3 -m pip install click pyserial pyparsing
-        
-        # Verify installation
+        # Verify ESP-IDF installation by checking basic commands
         idf.py --version
         xtensa-esp32s3-elf-gcc --version
+        
+        # Test if idf.py can be used (this will validate Python dependencies)
+        cd /tmp && idf.py --help > /dev/null && echo "ESP-IDF dependencies verified"
 
     - name: Configure Build Environment
       run: |

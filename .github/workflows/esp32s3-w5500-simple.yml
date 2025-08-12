@@ -35,10 +35,14 @@ jobs:
         git clone -b v5.2.3 --recursive https://github.com/espressif/esp-idf.git
         cd esp-idf
         ./install.sh esp32s3
+        
+        # Install Python requirements for ESP-IDF
+        python3 -m pip install -r requirements.txt
+        
         source export.sh
         
-        # Ensure Python packages are properly installed in ESP-IDF environment
-        python3 -m pip install click pyserial pyparsing
+        # Test ESP-IDF functionality
+        cd /tmp && idf.py --help > /dev/null && echo "ESP-IDF ready"
         
         echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV

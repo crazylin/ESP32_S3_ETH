@@ -87,9 +87,12 @@ jobs:
       id: cache-esp-idf
       with:
         path: |
-          ~/esp
+          ~/esp/esp-idf
           ~/.espressif
-          ~/cache/esp32
+          ~/.cache/esp32
+          ~/.espressif/python_env
+          ~/.espressif/tools
+          ~/.espressif/dist
         key: ${{ steps.cache-keys.outputs.esp_idf_key }}
         restore-keys: |
           ${{ runner.os }}-esp-idf-
@@ -160,6 +163,9 @@ jobs:
         # Install ESP-IDF tools for ESP32-S3
         ./install.sh esp32s3
         
+        # Install Python requirements for ESP-IDF
+        python3 -m pip install -r requirements.txt
+        
         # Export environment
         source export.sh
         
@@ -173,12 +179,12 @@ jobs:
         echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
         
-        # Ensure Python packages are properly installed in ESP-IDF environment
-        python3 -m pip install click pyserial pyparsing
-        
-        # Verify installation
+        # Verify ESP-IDF installation by checking basic commands
         idf.py --version
         xtensa-esp32s3-elf-gcc --version
+        
+        # Test if idf.py can be used (this will validate Python dependencies)
+        cd /tmp && idf.py --help > /dev/null && echo "ESP-IDF dependencies verified"
 
     - name: Configure Build Environment
       run: |
