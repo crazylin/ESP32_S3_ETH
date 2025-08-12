@@ -1,25 +1,43 @@
-name: ESP32-S3 Build
+name: Build .NET nanoFramework for ESP32-S3
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    container:
-      image: espressif/idf:release-v5.1
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Build project
-        shell: bash   # 用 bash 来兼容 [[ 语法
+      - name: Set up Python 3.6
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.6'
+
+      - name: Install dependencies
         run: |
-          . /opt/esp/idf/export.sh
-          cd $GITHUB_WORKSPACE  # 如果 CMakeLists.txt 不在根目录，这里改成你的项目目录
-          idf.py set-target esp32s3 fullclean
-          idf.py build -v
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gperf ccache dfu-util wget python3-serial
+
+      - name: Clone nf-interpreter repository
+        run: |
+          git clone --recursive https://github.com/nanoframework/nf-interpreter.git
+          cd nf-interpreter
+          git submodule update --init --recursive
+
+      - name: Set up ESP-IDF
+        run: |
+          cd nf-interpreter
+          ./tools/install-esp-idf.sh
+
+      - name: Build firmware for ESP32-S3
+        run: |
+          cd nf-interpreter
+          ./build.sh ESP32_S3
