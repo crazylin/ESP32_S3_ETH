@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      image: espressif/idf:release-v5.1.1  # 固定版本
+      image: espressif/idf:release-v5.1  # 固定版本
 
     steps:
       - name: Checkout code
