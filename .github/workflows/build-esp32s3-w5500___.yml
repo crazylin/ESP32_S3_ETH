@@ -45,6 +45,5 @@ jobs:
           IDF_PATH: $HOME/esp/esp-idf-v5.0
         run: |
           source $HOME/esp/esp-idf-v5.0/export.sh
-          cd nf-interpreter/targets/esp32
-          idf.py set-target esp32s3
+          cd nf-interpreter/targets/esp32_s3
           idf.py build
