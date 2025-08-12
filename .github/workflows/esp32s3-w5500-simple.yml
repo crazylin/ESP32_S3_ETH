@@ -36,6 +36,10 @@ jobs:
         cd esp-idf
         ./install.sh esp32s3
         source export.sh
+        
+        # Ensure Python packages are properly installed in ESP-IDF environment
+        python3 -m pip install click pyserial pyparsing
+        
         echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
 
