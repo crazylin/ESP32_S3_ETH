@@ -114,8 +114,12 @@ jobs:
               
               # 手动下载并安装 ESP32-S3 工具链
               echo "Downloading ESP32-S3 toolchain manually..."
+              echo "Current directory: $(pwd)"
+              echo "Creating toolchain directory..."
               mkdir -p "$HOME/.espressif/tools/xtensa-esp32s3-elf"
+              echo "Toolchain directory created: $HOME/.espressif/tools/xtensa-esp32s3-elf"
               cd "$HOME/.espressif/tools/xtensa-esp32s3-elf"
+              echo "Changed to toolchain directory: $(pwd)"
               
               # 下载 ESP32-S3 工具链 (使用官方预编译版本)
               echo "Attempting to download ESP32-S3 toolchain..."
@@ -127,35 +131,55 @@ jobs:
                 "10.4_20230516"
               )
               
+              echo "Available toolchain versions to try: ${TOOLCHAIN_VERSIONS[*]}"
               TOOLCHAIN_DOWNLOADED=false
               for version in "${TOOLCHAIN_VERSIONS[@]}"; do
-                echo "Trying toolchain version: $version"
+                echo "=== Trying toolchain version: $version ==="
                 TOOLCHAIN_URL="https://github.com/espressif/crosstool-NG/releases/download/esp-${version}/xtensa-esp32s3-elf-${version}-x86_64-linux-gnu.tar.gz"
                 
                 echo "Downloading from: $TOOLCHAIN_URL"
+                echo "Current directory: $(pwd)"
+                echo "Available space: $(df -h . | tail -1)"
+                
                 if curl -L -o toolchain.tar.gz "$TOOLCHAIN_URL"; then
-                  echo "Toolchain downloaded successfully, extracting..."
+                  echo "✓ Toolchain downloaded successfully"
+                  echo "Downloaded file size: $(ls -lh toolchain.tar.gz)"
+                  echo "Extracting toolchain..."
+                  
                   if tar -xzf toolchain.tar.gz; then
                     echo "✓ Toolchain extracted successfully"
+                    echo "Extracted contents:"
+                    ls -la
+                    
                     # 移动文件到正确位置
                     if [ -d "xtensa-esp32s3-elf" ]; then
+                      echo "Found xtensa-esp32s3-elf directory, moving files..."
                       mv xtensa-esp32s3-elf/* .
                       rmdir xtensa-esp32s3-elf
                       echo "✓ ESP32-S3 toolchain installed manually (version: $version)"
+                      echo "Final toolchain contents:"
+                      ls -la
                       TOOLCHAIN_DOWNLOADED=true
                       break
                     else
                       echo "✗ Toolchain extraction failed - unexpected directory structure for version $version"
+                      echo "Expected 'xtensa-esp32s3-elf' directory not found"
+                      echo "Available directories:"
+                      find . -type d -maxdepth 1
                       rm -f toolchain.tar.gz
                       continue
                     fi
                   else
                     echo "✗ Toolchain extraction failed for version $version"
+                    echo "Extraction error details:"
+                    tar -tzf toolchain.tar.gz | head -10
                     rm -f toolchain.tar.gz
                     continue
                   fi
                 else
                   echo "✗ Toolchain download failed for version $version"
+                  echo "Download error details:"
+                  curl -I "$TOOLCHAIN_URL" 2>/dev/null || echo "Cannot check URL status"
                   continue
                 fi
               done
@@ -243,6 +267,8 @@ jobs:
             echo "✗ ESP32-S3 toolchain not found in system PATH"
           fi
           
+          # 手动安装已经在之前的步骤中尝试过，如果仍然失败则退出
+          echo "✗ ESP32-S3 toolchain installation failed after all attempts"
           echo "✗ Failed to install ESP32-S3 toolchain"
           exit 1
         fi
