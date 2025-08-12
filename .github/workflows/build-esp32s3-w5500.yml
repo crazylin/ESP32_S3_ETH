@@ -264,10 +264,32 @@ jobs:
           ESP32S3_TOOLCHAIN_FOUND=true
         fi
         
-        # 方法 2: 搜索所有可能的工具链目录
+        # 方法 2: 搜索所有可能的工具链目录 (优先查找包含 bin 目录的工具链根目录)
         if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
           echo "Searching for ESP32-S3 toolchain in all locations..."
-          ESP32S3_TOOLCHAIN_PATH=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
+          
+          # 首先尝试查找包含 bin 目录的工具链根目录
+          ESP32S3_TOOLCHAIN_PATH=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | while read dir; do
+            if [ -d "$dir/bin" ] && [ -f "$dir/bin/xtensa-esp32s3-elf-gcc" ]; then
+              echo "$dir"
+              break
+            fi
+          done | head -1)
+          
+          # 如果没有找到包含 bin 目录的，尝试查找任何包含 esp32s3 的目录
+          if [ -z "$ESP32S3_TOOLCHAIN_PATH" ]; then
+            ESP32S3_TOOLCHAIN_PATH=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
+            if [ -n "$ESP32S3_TOOLCHAIN_PATH" ]; then
+              echo "Found ESP32S3 directory: $ESP32S3_TOOLCHAIN_PATH"
+              # 检查这个目录的父目录是否包含 bin 目录
+              PARENT_DIR=$(dirname "$ESP32S3_TOOLCHAIN_PATH")
+              if [ -d "$PARENT_DIR/bin" ]; then
+                echo "Found parent directory with bin: $PARENT_DIR"
+                ESP32S3_TOOLCHAIN_PATH="$PARENT_DIR"
+              fi
+            fi
+          fi
+          
           if [ -n "$ESP32S3_TOOLCHAIN_PATH" ]; then
             echo "✓ ESP32-S3 toolchain found in: $ESP32S3_TOOLCHAIN_PATH"
             ESP32S3_TOOLCHAIN_FOUND=true
@@ -290,6 +312,106 @@ jobs:
               ESP32S3_TOOLCHAIN_PATH=$(dirname "$ESP32S3_TOOLCHAIN_PATH")
               ESP32S3_TOOLCHAIN_FOUND=true
             fi
+          fi
+        fi
+        
+        # 方法 4: 专门查找已知存在的 Xtensa 工具链 (ESP32-S3 兼容)
+        if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
+          echo "Method 4: Looking for Xtensa toolchain that's ESP32-S3 compatible..."
+          
+          # 查找包含 esp-13.2.0 的 Xtensa 工具链 (从日志中我们知道这个存在)
+          XTENSA_TOOLCHAIN_PATH=$(find "$HOME/.espressif/tools" -path "*/esp-13.2.0_20230928/xtensa-esp-elf" -type d 2>/dev/null | head -1)
+          
+          if [ -n "$XTENSA_TOOLCHAIN_PATH" ]; then
+            echo "✓ Found Xtensa toolchain at: $XTENSA_TOOLCHAIN_PATH"
+            
+            # 检查这个工具链是否包含编译器
+            if [ -d "$XTENSA_TOOLCHAIN_PATH/bin" ] && [ -f "$XTENSA_TOOLCHAIN_PATH/bin/xtensa-esp-elf-gcc" ]; then
+              echo "✓ Xtensa toolchain contains compiler in bin directory"
+              ESP32S3_TOOLCHAIN_PATH="$XTENSA_TOOLCHAIN_PATH"
+              ESP32S3_TOOLCHAIN_FOUND=true
+            else
+              echo "Checking parent directory for bin..."
+              PARENT_DIR=$(dirname "$XTENSA_TOOLCHAIN_PATH")
+              if [ -d "$PARENT_DIR/bin" ] && [ -f "$PARENT_DIR/bin/xtensa-esp-elf-gcc" ]; then
+                echo "✓ Found bin directory in parent: $PARENT_DIR"
+                ESP32S3_TOOLCHAIN_PATH="$PARENT_DIR"
+                ESP32S3_TOOLCHAIN_FOUND=true
+              else
+                echo "✗ No bin directory found in Xtensa toolchain"
+              fi
+            fi
+          else
+            echo "No Xtensa toolchain with esp-13.2.0 found"
+          fi
+        fi
+        
+        # 方法 5: 查找任何包含编译器的 Xtensa 工具链
+        if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
+          echo "Method 5: Looking for any Xtensa toolchain with compiler..."
+          
+          # 显示所有找到的 Xtensa 目录
+          echo "All Xtensa directories found:"
+          find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | sort
+          
+          # 查找所有 Xtensa 工具链目录
+          for xtensa_dir in $(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | sort); do
+            echo "Checking Xtensa directory: $xtensa_dir"
+            
+            # 检查这个目录是否包含 bin 目录和编译器
+            if [ -d "$xtensa_dir/bin" ] && [ -f "$xtensa_dir/bin/xtensa-esp-elf-gcc" ]; then
+              echo "✓ Found working Xtensa toolchain at: $xtensa_dir"
+              ESP32S3_TOOLCHAIN_PATH="$xtensa_dir"
+              ESP32S3_TOOLCHAIN_FOUND=true
+              break
+            fi
+            
+            # 检查父目录是否包含 bin 目录
+            PARENT_DIR=$(dirname "$xtensa_dir")
+            if [ -d "$PARENT_DIR/bin" ] && [ -f "$PARENT_DIR/bin/xtensa-esp-elf-gcc" ]; then
+              echo "✓ Found working Xtensa toolchain in parent: $PARENT_DIR"
+              ESP32S3_TOOLCHAIN_PATH="$PARENT_DIR"
+              ESP32S3_TOOLCHAIN_FOUND=true
+              break
+            fi
+            
+            # 检查祖父目录是否包含 bin 目录
+            GRANDPARENT_DIR=$(dirname "$PARENT_DIR")
+            if [ -d "$GRANDPARENT_DIR/bin" ] && [ -f "$GRANDPARENT_DIR/bin/xtensa-esp-elf-gcc" ]; then
+              echo "✓ Found working Xtensa toolchain in grandparent: $GRANDPARENT_DIR"
+              ESP32S3_TOOLCHAIN_PATH="$GRANDPARENT_DIR"
+              ESP32S3_TOOLCHAIN_FOUND=true
+              break
+            fi
+          done
+        fi
+        
+        # 方法 6: 最后尝试 - 直接检查已知的目录结构
+        if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
+          echo "Method 6: Direct check of known directory structure..."
+          
+          # 从日志中我们知道这个路径存在
+          KNOWN_PATH="$HOME/.espressif/tools/xtensa-esp-elf/esp-13.2.0_20230928/xtensa-esp-elf"
+          echo "Checking known path: $KNOWN_PATH"
+          
+          if [ -d "$KNOWN_PATH" ]; then
+            echo "✓ Known path exists"
+            
+            # 检查这个目录的父目录是否包含 bin
+            PARENT_PATH="$HOME/.espressif/tools/xtensa-esp-elf/esp-13.2.0_20230928"
+            echo "Checking parent path: $PARENT_PATH"
+            
+            if [ -d "$PARENT_PATH/bin" ] && [ -f "$PARENT_PATH/bin/xtensa-esp-elf-gcc" ]; then
+              echo "✓ Found working toolchain in parent: $PARENT_PATH"
+              ESP32S3_TOOLCHAIN_PATH="$PARENT_PATH"
+              ESP32S3_TOOLCHAIN_FOUND=true
+            else
+              echo "✗ No bin directory found in parent"
+              echo "Parent directory contents:"
+              ls -la "$PARENT_PATH" 2>/dev/null || echo "Cannot access parent directory"
+            fi
+          else
+            echo "✗ Known path does not exist"
           fi
         fi
         

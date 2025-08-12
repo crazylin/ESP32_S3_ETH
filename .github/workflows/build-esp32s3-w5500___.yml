@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      image: espressif/idf:release-v5.1  # 固定版本
+      image: espressif/idf:release-v5.1
 
     steps:
       - name: Checkout code
@@ -29,11 +29,13 @@ jobs:
       - name: Set target and clean build
         run: |
           . /opt/esp/idf/export.sh
+          cd $GITHUB_WORKSPACE
           idf.py set-target esp32s3 fullclean
 
       - name: Build project
         run: |
           . /opt/esp/idf/export.sh
+          cd $GITHUB_WORKSPACE
           idf.py build -v
 
       - name: Upload firmware binaries
