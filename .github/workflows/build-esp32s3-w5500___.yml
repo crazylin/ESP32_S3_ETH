@@ -1,8 +1,8 @@
-name: Build ESP32-S3 W5500
+name: ESP32-S3 Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -13,39 +13,13 @@ jobs:
       image: espressif/idf:release-v5.1
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache ESP-IDF dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.espressif
-            ~/.cache
-          key: ${{ runner.os }}-esp-idf-${{ hashFiles('**/CMakeLists.txt', '**/idf_component.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-esp-idf-
-
-      - name: Set target and clean build
-        run: |
-          . /opt/esp/idf/export.sh
-          cd $GITHUB_WORKSPACE
-          idf.py set-target esp32s3 fullclean
-
       - name: Build project
+        shell: bash   # 用 bash 来兼容 [[ 语法
         run: |
           . /opt/esp/idf/export.sh
-          cd $GITHUB_WORKSPACE
+          cd $GITHUB_WORKSPACE  # 如果 CMakeLists.txt 不在根目录，这里改成你的项目目录
+          idf.py set-target esp32s3 fullclean
           idf.py build -v
-
-      - name: Upload firmware binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware-binaries
-          path: build/*.bin
-
-      - name: Upload full build directory
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-directory
-          path: build/
