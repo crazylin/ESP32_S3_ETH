@@ -86,9 +86,15 @@
 **问题**: JSON Parse Error: Duplicate key和Extra non-whitespace
 **修复**:
 - 移除重复的`NF_DEBUGGER_NO_PORT`键
+- 移除重复的`NF_BUILD_RTM`键
 - 移除重复的变量定义
 - 清理文件末尾的多余字符
 - 验证JSON语法正确性
+
+**具体修复**:
+- Release配置: 保留第一个`NF_BUILD_RTM: "ON"`，移除末尾的`"NF_BUILD_RTM": "OFF"`
+- Debug配置: 保留唯一的`NF_BUILD_RTM: "OFF"`
+- 确保所有键在各自对象中唯一
 
 ## 预期结果
 
