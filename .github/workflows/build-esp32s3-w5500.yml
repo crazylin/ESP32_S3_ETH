@@ -96,7 +96,31 @@ jobs:
         
         # 安装 ESP32-S3 工具链
         echo "=== Installing ESP32-S3 Toolchain ==="
-        ./install.sh esp32s3
+        
+        # 方法 1: 尝试安装 ESP32-S3 工具链
+        echo "Method 1: Installing with esp32s3 target..."
+        if ./install.sh esp32s3; then
+          echo "✓ ESP32-S3 toolchain installation completed"
+        else
+          echo "Method 1 failed, trying Method 2: Installing all targets..."
+          if ./install.sh; then
+            echo "✓ All targets installation completed"
+          else
+            echo "Method 2 failed, trying Method 3: Installing specific toolchain..."
+            if ./install.sh --targets esp32s3; then
+              echo "✓ Specific toolchain installation completed"
+            else
+              echo "All installation methods failed!"
+              echo "Available installation options:"
+              ./install.sh --help | head -20
+              exit 1
+            fi
+          fi
+        fi
+        
+        # 等待一下确保安装完成
+        echo "Waiting for installation to complete..."
+        sleep 5
         
         # 验证安装
         echo "=== ESP-IDF Installation Verification ==="
@@ -105,41 +129,31 @@ jobs:
         
         # 验证 ESP32-S3 工具链是否安装成功
         echo "=== ESP32-S3 Toolchain Verification ==="
+        
+        # 检查工具链目录
         if [ -d "$HOME/.espressif/tools/xtensa-esp32s3-elf" ]; then
           echo "✓ ESP32-S3 toolchain directory found"
+          echo "Toolchain contents:"
           find "$HOME/.espressif/tools/xtensa-esp32s3-elf" -name "*gcc" -type f
+          echo "Toolchain bin directory:"
+          ls -la "$HOME/.espressif/tools/xtensa-esp32s3-elf/bin/" || echo "No bin directory found"
         else
           echo "✗ ESP32-S3 toolchain directory not found"
           echo "Available toolchains:"
           ls -la "$HOME/.espressif/tools/" || echo "No tools directory found"
           
-          # 尝试手动安装 ESP32-S3 工具链
-          echo "Attempting to install ESP32-S3 toolchain manually..."
-          cd ~/esp/esp-idf
+          # 检查是否有其他 Xtensa 工具链
+          echo "Checking for other Xtensa toolchains..."
+          find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null || echo "No Xtensa toolchains found"
           
-          # 尝试不同的安装方法
-          echo "Method 1: Installing with esp32s3 target..."
-          ./install.sh esp32s3 || {
-            echo "Method 1 failed, trying Method 2: Installing all targets..."
-            ./install.sh || {
-              echo "Method 2 failed, trying Method 3: Installing specific toolchain..."
-              ./install.sh --targets esp32s3 || {
-                echo "All installation methods failed!"
-                echo "Available installation options:"
-                ./install.sh --help | head -20
-                exit 1
-              }
-            }
-          }
+          # 检查是否有任何工具链
+          echo "All available tools:"
+          find "$HOME/.espressif/tools" -type d 2>/dev/null | head -20
           
-          # 再次验证
-          if [ -d "$HOME/.espressif/tools/xtensa-esp32s3-elf" ]; then
-            echo "✓ ESP32-S3 toolchain installed successfully"
-          else
-            echo "✗ Failed to install ESP32-S3 toolchain"
-            exit 1
-          fi
+          echo "✗ Failed to install ESP32-S3 toolchain"
+          exit 1
         fi
+        
         echo "========================================"
 
     - name: Setup ESP-IDF Environment
