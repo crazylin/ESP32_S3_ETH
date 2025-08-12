@@ -206,6 +206,9 @@ jobs:
     - name: Configure CMake (with ccache)
       working-directory: nf-interpreter
       run: |
+        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
+        unset IDF_PATH
+        
         source ~/esp/esp-idf/export.sh
         
         # Show ccache stats before build
@@ -220,6 +223,9 @@ jobs:
     - name: Build Firmware (with ccache)
       working-directory: nf-interpreter
       run: |
+        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
+        unset IDF_PATH
+        
         source ~/esp/esp-idf/export.sh
         
         # Show ccache stats before build

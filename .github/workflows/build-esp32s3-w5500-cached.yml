@@ -208,6 +208,8 @@ jobs:
     - name: Configure CMake (with cache)
       working-directory: nf-interpreter
       run: |
+        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
+        unset IDF_PATH
         source ~/esp/esp-idf/export.sh
         
         # Configure build using CMake presets

@@ -80,6 +80,9 @@ jobs:
       run: |
         cd nf-interpreter
         
+        # Clear IDF_PATH to avoid conflicts with ESP32_IDF_PATH
+        unset IDF_PATH
+        
         # Copy the CMake presets file to nf-interpreter directory
         cp ../CMakePresets-W5500.json CMakePresets.json
         
