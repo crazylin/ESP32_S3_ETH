@@ -189,6 +189,31 @@ jobs:
                 exit 1
               fi
               
+              # 验证手动安装的工具链
+              echo "=== Verifying Manual Toolchain Installation ==="
+              if [ -d "$HOME/.espressif/tools/xtensa-esp32s3-elf" ]; then
+                echo "✓ ESP32-S3 toolchain directory found after manual installation"
+                echo "Toolchain contents:"
+                ls -la "$HOME/.espressif/tools/xtensa-esp32s3-elf/"
+                
+                if [ -f "$HOME/.espressif/tools/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc" ]; then
+                  echo "✓ ESP32-S3 GCC compiler found and verified"
+                  echo "GCC version: $($HOME/.espressif/tools/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc --version | head -1)"
+                  
+                  # 设置环境变量以便后续步骤使用
+                  export PATH="$HOME/.espressif/tools/xtensa-esp32s3-elf/bin:$PATH"
+                  echo "✓ Toolchain PATH updated: $HOME/.espressif/tools/xtensa-esp32s3-elf/bin"
+                else
+                  echo "✗ ESP32-S3 GCC compiler not found in manual installation"
+                  exit 1
+                fi
+              else
+                echo "✗ ESP32-S3 toolchain directory not found after manual installation"
+                echo "Available directories in tools:"
+                ls -la "$HOME/.espressif/tools/" || echo "No tools directory found"
+                exit 1
+              fi
+              
               cd ~/esp/esp-idf
             fi
           fi
@@ -229,23 +254,62 @@ jobs:
         # 验证 ESP32-S3 工具链是否安装成功
         echo "=== ESP32-S3 Toolchain Verification ==="
         
-        # 检查工具链目录
+        # 智能查找 ESP32-S3 工具链
+        ESP32S3_TOOLCHAIN_FOUND=false
+        
+        # 方法 1: 检查标准目录
         if [ -d "$HOME/.espressif/tools/xtensa-esp32s3-elf" ]; then
-          echo "✓ ESP32-S3 toolchain directory found"
+          echo "✓ ESP32-S3 toolchain directory found in standard location"
+          ESP32S3_TOOLCHAIN_PATH="$HOME/.espressif/tools/xtensa-esp32s3-elf"
+          ESP32S3_TOOLCHAIN_FOUND=true
+        fi
+        
+        # 方法 2: 搜索所有可能的工具链目录
+        if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
+          echo "Searching for ESP32-S3 toolchain in all locations..."
+          ESP32S3_TOOLCHAIN_PATH=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
+          if [ -n "$ESP32S3_TOOLCHAIN_PATH" ]; then
+            echo "✓ ESP32-S3 toolchain found in: $ESP32S3_TOOLCHAIN_PATH"
+            ESP32S3_TOOLCHAIN_FOUND=true
+          fi
+        fi
+        
+        # 方法 3: 检查系统 PATH
+        if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
+          echo "Checking system PATH for ESP32-S3 toolchain..."
+          if command -v xtensa-esp32s3-elf-gcc >/dev/null 2>&1; then
+            echo "✓ ESP32-S3 toolchain found in system PATH"
+            ESP32S3_TOOLCHAIN_PATH=$(dirname "$(which xtensa-esp32s3-elf-gcc)")
+            ESP32S3_TOOLCHAIN_PATH=$(dirname "$ESP32S3_TOOLCHAIN_PATH")
+            ESP32S3_TOOLCHAIN_FOUND=true
+          fi
+        fi
+        
+        # 如果找到工具链，进行详细验证
+        if [ "$ESP32S3_TOOLCHAIN_FOUND" = true ]; then
+          echo "✓ ESP32-S3 toolchain found at: $ESP32S3_TOOLCHAIN_PATH"
           echo "Toolchain contents:"
-          find "$HOME/.espressif/tools/xtensa-esp32s3-elf" -name "*gcc" -type f
-          echo "Toolchain bin directory:"
-          ls -la "$HOME/.espressif/tools/xtensa-esp32s3-elf/bin/" || echo "No bin directory found"
+          ls -la "$ESP32S3_TOOLCHAIN_PATH/"
           
           # 验证关键工具是否存在
-          if [ -f "$HOME/.espressif/tools/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc" ]; then
+          if [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" ]; then
             echo "✓ ESP32-S3 GCC compiler found"
-            echo "GCC version: $($HOME/.espressif/tools/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc --version | head -1)"
+            echo "GCC version: $($ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc --version | head -1)"
+            
+            # 设置环境变量
+            export PATH="$ESP32S3_TOOLCHAIN_PATH/bin:$PATH"
+            echo "✓ Toolchain PATH updated: $ESP32S3_TOOLCHAIN_PATH/bin"
           else
-            echo "✗ ESP32-S3 GCC compiler not found"
+            echo "✗ ESP32-S3 GCC compiler not found in toolchain directory"
+            echo "Available files in bin directory:"
+            ls -la "$ESP32S3_TOOLCHAIN_PATH/bin/" 2>/dev/null || echo "No bin directory found"
+            ESP32S3_TOOLCHAIN_FOUND=false
           fi
-        else
-          echo "✗ ESP32-S3 toolchain directory not found"
+        fi
+        
+        # 如果仍然没有找到工具链，显示诊断信息
+        if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
+          echo "✗ ESP32-S3 toolchain not found after all search methods"
           echo "Available toolchains:"
           ls -la "$HOME/.espressif/tools/" || echo "No tools directory found"
           
@@ -257,17 +321,6 @@ jobs:
           echo "All available tools:"
           find "$HOME/.espressif/tools" -type d 2>/dev/null | head -20
           
-          # 检查系统是否已经有 ESP32-S3 工具链
-          echo "Checking system for ESP32-S3 toolchain..."
-          if command -v xtensa-esp32s3-elf-gcc >/dev/null 2>&1; then
-            echo "✓ ESP32-S3 toolchain found in system PATH"
-            echo "GCC version: $(xtensa-esp32s3-elf-gcc --version | head -1)"
-            echo "GCC path: $(which xtensa-esp32s3-elf-gcc)"
-          else
-            echo "✗ ESP32-S3 toolchain not found in system PATH"
-          fi
-          
-          # 手动安装已经在之前的步骤中尝试过，如果仍然失败则退出
           echo "✗ ESP32-S3 toolchain installation failed after all attempts"
           echo "✗ Failed to install ESP32-S3 toolchain"
           exit 1
@@ -287,16 +340,26 @@ jobs:
         # 动态查找并设置工具链路径
         echo "=== Dynamic Toolchain Path Setup ==="
         
-        # 查找 ESP32-S3 工具链
-        ESP32S3_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
-        if [ -n "$ESP32S3_TOOLCHAIN" ]; then
-          echo "Found ESP32-S3 toolchain: $ESP32S3_TOOLCHAIN"
-          echo "PATH=$ESP32S3_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
-          echo "CXX=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+        # 使用之前验证步骤中找到的工具链路径
+        if [ -n "$ESP32S3_TOOLCHAIN_PATH" ]; then
+          echo "Using verified ESP32-S3 toolchain: $ESP32S3_TOOLCHAIN_PATH"
+          echo "PATH=$ESP32S3_TOOLCHAIN_PATH/bin:$PATH" >> $GITHUB_ENV
+          echo "CC=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
+          echo "CXX=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+          echo "ESP32S3_TOOLCHAIN_PATH=$ESP32S3_TOOLCHAIN_PATH" >> $GITHUB_ENV
         else
-          echo "ESP32-S3 toolchain not found, trying to find any Xtensa toolchain..."
-          XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -1)
+          # 如果环境变量中没有，尝试重新查找
+          echo "ESP32S3_TOOLCHAIN_PATH not set, searching for toolchain..."
+          ESP32S3_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*esp32s3*" -type d 2>/dev/null | head -1)
+          if [ -n "$ESP32S3_TOOLCHAIN" ]; then
+            echo "Found ESP32-S3 toolchain: $ESP32S3_TOOLCHAIN"
+            echo "PATH=$ESP32S3_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
+            echo "CC=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
+            echo "CXX=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+            echo "ESP32S3_TOOLCHAIN_PATH=$ESP32S3_TOOLCHAIN" >> $GITHUB_ENV
+          else
+            echo "ESP32-S3 toolchain not found, trying to find any Xtensa toolchain..."
+            XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -1)
           if [ -n "$XTENSA_TOOLCHAIN" ]; then
             echo "Found Xtensa toolchain: $XTENSA_TOOLCHAIN"
             echo "PATH=$XTENSA_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
@@ -306,6 +369,7 @@ jobs:
             echo "No Xtensa toolchain found!"
             exit 1
           fi
+        fi
         fi
         
         # 查找并设置 Ninja 路径
@@ -326,6 +390,31 @@ jobs:
         echo "PATH=$HOME/.espressif/tools/ccache/4.8/ccache-4.8-linux-x86_64:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/dfu-util/0.11/dfu-util-0.11/dfu-util:$PATH" >> $GITHUB_ENV
         echo "PATH=$HOME/.espressif/tools/esp-rom-elfs/20230320:$PATH" >> $GITHUB_ENV
+        
+        # 最终验证 ESP32-S3 工具链
+        echo "=== Final ESP32-S3 Toolchain Verification ==="
+        if [ -n "$ESP32S3_TOOLCHAIN_PATH" ]; then
+          echo "ESP32S3_TOOLCHAIN_PATH: $ESP32S3_TOOLCHAIN_PATH"
+          echo "CC: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc"
+          echo "CXX: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++"
+          
+          # 验证工具链文件存在
+          if [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" ]; then
+            echo "✓ ESP32-S3 GCC compiler file exists"
+          else
+            echo "✗ ESP32-S3 GCC compiler file not found"
+            exit 1
+          fi
+        else
+          echo "ESP32S3_TOOLCHAIN_PATH not set, checking PATH for toolchain..."
+          if command -v xtensa-esp32s3-elf-gcc >/dev/null 2>&1; then
+            echo "✓ ESP32-S3 GCC compiler found in PATH"
+            echo "GCC path: $(which xtensa-esp32s3-elf-gcc)"
+          else
+            echo "✗ ESP32-S3 GCC compiler not found in PATH"
+            exit 1
+          fi
+        fi
 
     - name: Verify Build Tools
       run: |
