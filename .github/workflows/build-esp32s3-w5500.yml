@@ -471,7 +471,7 @@ jobs:
                 # 尝试通用 Xtensa 目标
                 if $ESP32S3_TOOLCHAIN_PATH/bin/$COMPILER_NAME -march=xtensa -o /tmp/test_xtensa "$TEST_FILE" 2>/dev/null; then
                   echo "✓ Generic Xtensa compilation test successful"
-                  rm -f "$TEST_FILE" /tmp/test_xtensa"
+                  rm -f "$TEST_FILE" /tmp/test_xtensa
                 else
                   echo "⚠ Generic Xtensa compilation test also failed"
                 fi
