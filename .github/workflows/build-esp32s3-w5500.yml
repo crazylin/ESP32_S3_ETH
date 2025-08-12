@@ -636,12 +636,50 @@ jobs:
         elif [ -f "$HOME/esp/esp-idf/tools/cmake/ninja" ]; then
           NINJA_PATH="$HOME/esp/esp-idf/tools/cmake/ninja"
           echo "Found Ninja in ESP-IDF cmake tools: $NINJA_PATH"
-        # 最后尝试 find 命令
+        # 检查 ESP-IDF 工具目录下的其他子目录
+        elif [ -f "$HOME/esp/esp-idf/tools/check_python_dependencies/ninja" ]; then
+          NINJA_PATH="$HOME/esp/esp-idf/tools/check_python_dependencies/ninja"
+          echo "Found Ninja in ESP-IDF check_python_dependencies: $NINJA_PATH"
+        elif [ -f "$HOME/esp/esp-idf/tools/idf_tools.py" ]; then
+          # 如果找到 idf_tools.py，尝试使用它来查找 ninja
+          echo "Found idf_tools.py, checking for ninja..."
+          NINJA_PATH=$(find "$HOME/esp/esp-idf/tools" -name "ninja" -type f 2>/dev/null | head -1)
+          if [ -n "$NINJA_PATH" ]; then
+            echo "Found Ninja in ESP-IDF tools via find: $NINJA_PATH"
+          fi
+        # 最后尝试 find 命令在 .espressif 工具目录
         else
           NINJA_PATH=$(find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null | head -1)
           if [ -n "$NINJA_PATH" ]; then
             echo "Found Ninja via find: $NINJA_PATH"
           fi
+        fi
+        
+        # 如果还是没找到，检查系统 PATH 中是否有 ninja
+        if [ -z "$NINJA_PATH" ]; then
+          if command -v ninja >/dev/null 2>&1; then
+            NINJA_PATH=$(command -v ninja)
+            echo "Found Ninja in system PATH: $NINJA_PATH"
+          fi
+        fi
+        
+        # 检查 ESP-IDF Python 环境中是否有 ninja
+        if [ -z "$NINJA_PATH" ] && [ -f "$HOME/esp/esp-idf/tools/idf_tools.py" ]; then
+          echo "Checking ESP-IDF Python environment for ninja..."
+          cd "$HOME/esp/esp-idf"
+          if [ -f "requirements.txt" ]; then
+            echo "ESP-IDF requirements.txt found, checking if ninja is listed..."
+            if grep -q "ninja" requirements.txt; then
+              echo "Ninja found in ESP-IDF requirements, activating Python environment..."
+              # 激活 ESP-IDF Python 环境
+              . "$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1 || true
+              if command -v ninja >/dev/null 2>&1; then
+                NINJA_PATH=$(command -v ninja)
+                echo "Found Ninja in ESP-IDF Python environment: $NINJA_PATH"
+              fi
+            fi
+          fi
+          cd - >/dev/null
         fi
         
         if [ -n "$NINJA_PATH" ]; then
@@ -659,7 +697,42 @@ jobs:
           ls -la "$HOME/esp/esp-idf/tools/cmake/" 2>/dev/null || echo "ESP-IDF cmake tools directory not accessible"
           echo "Searching for ninja in ESP-IDF tools recursively:"
           find "$HOME/esp/esp-idf/tools" -name "ninja" -type f 2>/dev/null || echo "No ninja found in ESP-IDF tools"
-          exit 1
+          
+          echo "Attempting to install ninja..."
+          # 尝试使用 pip 安装 ninja
+          if command -v pip3 >/dev/null 2>&1; then
+            echo "Installing ninja via pip3..."
+            pip3 install ninja
+            if command -v ninja >/dev/null 2>&1; then
+              NINJA_PATH=$(command -v ninja)
+              echo "✓ Ninja installed successfully via pip3: $NINJA_PATH"
+              echo "PATH=$(dirname "$NINJA_PATH"):$PATH" >> $GITHUB_ENV
+              echo "CMAKE_MAKE_PROGRAM=$NINJA_PATH" >> $GITHUB_ENV
+            else
+              echo "✗ Failed to install ninja via pip3"
+            fi
+          fi
+          
+          # 如果 pip 安装失败，尝试使用 apt
+          if [ -z "$NINJA_PATH" ] && command -v apt-get >/dev/null 2>&1; then
+            echo "Installing ninja via apt-get..."
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+            if command -v ninja >/dev/null 2>&1; then
+              NINJA_PATH=$(command -v ninja)
+              echo "✓ Ninja installed successfully via apt-get: $NINJA_PATH"
+              echo "PATH=$(dirname "$NINJA_PATH"):$PATH" >> $GITHUB_ENV
+              echo "CMAKE_MAKE_PROGRAM=$NINJA_PATH" >> $GITHUB_ENV
+            else
+              echo "✗ Failed to install ninja via apt-get"
+            fi
+          fi
+          
+          # 如果所有安装方法都失败，退出
+          if [ -z "$NINJA_PATH" ]; then
+            echo "✗ All ninja installation methods failed!"
+            exit 1
+          fi
         fi
         
         # 设置其他常用工具路径

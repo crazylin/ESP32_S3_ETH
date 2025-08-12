@@ -1,0 +1,80 @@
+name: ESP32-S3 W5500 Simple Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git wget curl flex bison gperf python3-pip \
+          python3-setuptools cmake ninja-build ccache libffi-dev libssl-dev \
+          dfu-util libusb-1.0-0 build-essential
+
+    - name: Install ESP-IDF
+      run: |
+        mkdir -p ~/esp
+        cd ~/esp
+        git clone -b v5.2.3 --recursive https://github.com/espressif/esp-idf.git
+        cd esp-idf
+        ./install.sh esp32s3
+        source export.sh
+        echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
+        echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+
+    - name: Clone nanoFramework
+      run: |
+        git clone --recursive https://github.com/nanoframework/nf-interpreter.git
+
+    - name: Configure Build
+      run: |
+        source $HOME/esp/esp-idf/export.sh
+        cd nf-interpreter
+        
+        # 配置ESP32-S3 + W5500构建
+        cmake -G Ninja \
+          -DCMAKE_BUILD_TYPE=MinSizeRel \
+          -DCMAKE_TOOLCHAIN_FILE=$HOME/esp/esp-idf/tools/cmake/toolchain-esp32s3.cmake \
+          -DIDF_TARGET=esp32s3 \
+          -DTOOLCHAIN_PREFIX=xtensa-esp32s3-elf \
+          -DRTOS=ESP32 \
+          -DNF_BUILD_RTM=ON \
+          -DNF_FEATURE_DEBUGGER=OFF \
+          -DNF_FEATURE_RTC=ON \
+          -DAPI_System.IO.FileSystem=ON \
+          -DAPI_Windows.Devices.Gpio=ON \
+          -DAPI_Windows.Devices.Spi=ON \
+          -DAPI_Windows.Devices.I2c=ON \
+          -DAPI_Windows.Networking=ON \
+          -DAPI_nanoFramework.Networking.ESP32.Ethernet=ON \
+          -B build \
+          -S .
+
+    - name: Build Firmware
+      run: |
+        source $HOME/esp/esp-idf/export.sh
+        cd nf-interpreter
+        cmake --build build --config MinSizeRel
+
+    - name: Upload Firmware
+      uses: actions/upload-artifact@v4
+      with:
+        name: ESP32-S3-W5500-firmware
+        path: |
+          nf-interpreter/build/nanoCLR.bin
+          nf-interpreter/build/nanoCLR.elf
+        retention-days: 7

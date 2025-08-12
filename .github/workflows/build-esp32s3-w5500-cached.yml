@@ -1,0 +1,318 @@
+name: Build ESP32-S3 + W5500 nanoFramework Firmware (Cached)
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
+      cache_action:
+        description: 'Cache action'
+        required: false
+        default: 'restore'
+        type: choice
+        options:
+        - restore
+        - clear
+        - skip
+
+env:
+  ESP_IDF_VERSION: v5.2.3
+  NANOFRAMEWORK_VERSION: latest
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        build_type: ["${{ github.event.inputs.build_type || 'Release' }}"]
+        include:
+          - build_type: Release
+            cmake_build_type: MinSizeRel
+            rtm: ON
+            debugger: OFF
+          - build_type: Debug
+            cmake_build_type: Debug
+            rtm: OFF
+            debugger: ON
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        path: nanobuild-scripts
+
+    - name: Checkout nanoFramework
+      uses: actions/checkout@v4
+      with:
+        repository: nanoframework/nf-interpreter
+        path: nf-interpreter
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Free Disk Space
+      run: |
+        echo "Freeing up disk space..."
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        df -h
+
+    - name: Setup Cache Keys
+      id: cache-keys
+      run: |
+        echo "esp_idf_key=${{ runner.os }}-esp-idf-${{ env.ESP_IDF_VERSION }}" >> $GITHUB_OUTPUT
+        echo "ccache_key=${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "build_key=${{ runner.os }}-build-${{ matrix.build_type }}-${{ hashFiles('nf-interpreter/CMakeLists.txt', 'nf-interpreter/targets/ESP32/**') }}" >> $GITHUB_OUTPUT
+
+    - name: Cache ESP-IDF
+      if: github.event.inputs.cache_action != 'clear'
+      uses: actions/cache@v4
+      id: cache-esp-idf
+      with:
+        path: |
+          ~/esp
+          ~/.espressif
+          ~/cache/esp32
+        key: ${{ steps.cache-keys.outputs.esp_idf_key }}
+        restore-keys: |
+          ${{ runner.os }}-esp-idf-
+
+    - name: Cache ccache
+      if: github.event.inputs.cache_action != 'clear'
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.cache-keys.outputs.ccache_key }}
+        restore-keys: |
+          ${{ runner.os }}-ccache-${{ matrix.build_type }}-
+
+    - name: Cache Build
+      if: github.event.inputs.cache_action != 'clear'
+      uses: actions/cache@v4
+      with:
+        path: |
+          nf-interpreter/build
+          nf-interpreter/targets/ESP32/_common
+          nf-interpreter/targets/ESP32/_nanoCLR
+        key: ${{ steps.cache-keys.outputs.build_key }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ matrix.build_type }}-
+
+    - name: Clear Cache
+      if: github.event.inputs.cache_action == 'clear'
+      run: |
+        echo "Clearing all caches..."
+        rm -rf ~/esp ~/.espressif
+        rm -rf nf-interpreter/build
+        rm -rf ${{ env.CCACHE_DIR }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          git wget curl flex bison gperf python3 python3-pip \
+          python3-setuptools python3.11-venv cmake ninja-build ccache \
+          libffi-dev libssl-dev dfu-util libusb-1.0-0 \
+          build-essential gcc g++ gcc-multilib g++-multilib \
+          pkg-config autoconf automake libtool unzip
+
+    - name: Setup ccache
+      run: |
+        mkdir -p ${{ env.CCACHE_DIR }}
+        echo "CCACHE_DIR=${{ env.CCACHE_DIR }}" >> $GITHUB_ENV
+        echo "CCACHE_COMPRESS=1" >> $GITHUB_ENV
+        echo "CCACHE_COMPRESSLEVEL=6" >> $GITHUB_ENV
+        echo "CCACHE_MAXSIZE=500M" >> $GITHUB_ENV
+        ccache --zero-stats
+
+    - name: Install ESP-IDF (if not cached)
+      if: steps.cache-esp-idf.outputs.cache-hit != 'true'
+      run: |
+        mkdir -p ~/esp
+        cd ~/esp
+        
+        # Clone ESP-IDF with specific version
+        git clone -b ${{ env.ESP_IDF_VERSION }} --recursive https://github.com/espressif/esp-idf.git
+        cd esp-idf
+        
+        # Install ESP-IDF tools for ESP32-S3
+        ./install.sh esp32s3
+        
+        # Export environment
+        source export.sh
+        
+        # Verify installation
+        echo "ESP-IDF Version: $(idf.py --version)"
+        echo "ESP32-S3 Toolchain: $(xtensa-esp32s3-elf-gcc --version | head -1)"
+
+    - name: Verify ESP-IDF Installation
+      run: |
+        source ~/esp/esp-idf/export.sh
+        echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
+        echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+        idf.py --version
+        xtensa-esp32s3-elf-gcc --version
+
+    - name: Configure Build Environment
+      run: |
+        # Create build directory
+        mkdir -p nf-interpreter/build
+        
+        # Copy target configuration
+        cp nanobuild-scripts/CMakePresets-W5500.json nf-interpreter/CMakePresets.json
+
+    - name: Configure CMake (with cache)
+      working-directory: nf-interpreter
+      run: |
+        source ~/esp/esp-idf/export.sh
+        
+        # Configure build for ESP32-S3 with W5500
+        cmake -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.cmake_build_type }} \
+          -DCMAKE_TOOLCHAIN_FILE=$HOME/esp/esp-idf/tools/cmake/toolchain-esp32s3.cmake \
+          -DTOOLCHAIN_DIR=$HOME/esp/esp-idf/tools \
+          -DIDF_TARGET=esp32s3 \
+          -DTARGET_SERIES=ESP32_S3 \
+          -DTOOLCHAIN_PREFIX=xtensa-esp32s3-elf \
+          -DRTOS=ESP32 \
+          -DNF_BUILD_RTM=${{ matrix.rtm }} \
+          -DNF_FEATURE_DEBUGGER=${{ matrix.debugger }} \
+          -DNF_FEATURE_RTC=ON \
+          -DNF_FEATURE_HAS_SDCARD=ON \
+          -DNF_SECURITY_MBEDTLS=ON \
+          -DAPI_System.Device.Gpio=ON \
+          -DAPI_System.Device.Spi=ON \
+          -DAPI_System.Device.I2c=ON \
+          -DAPI_System.Device.Pwm=ON \
+          -DAPI_System.SerialCommunication=ON \
+          -DAPI_System.IO.FileSystem=ON \
+          -DAPI_Windows.Storage=ON \
+          -DAPI_System.Net=ON \
+          -DAPI_System.Net.NetworkInformation=ON \
+          -DAPI_System.Net.Sockets=ON \
+          -DAPI_System.Net.Http=ON \
+          -DAPI_System.Net.Security=ON \
+          -DAPI_nanoFramework.ResourceManager=ON \
+          -DAPI_nanoFramework.System.Collections=ON \
+          -DAPI_nanoFramework.System.Text=ON \
+          -DAPI_nanoFramework.Hardware.Esp32=ON \
+          -DAPI_nanoFramework.Networking=ON \
+          -DAPI_nanoFramework.Hardware.Esp32.Rmt=ON \
+          -DAPI_nanoFramework.System.IO.Streams=ON \
+          -DAPI_nanoFramework.Hardware.Esp32.Ble=ON \
+          -DAPI_nanoFramework.System.Net=ON \
+          -DAPI_nanoFramework.System.Net.Http=ON \
+          -DAPI_nanoFramework.System.Net.Sockets=ON \
+          -DAPI_nanoFramework.System.Net.Security=ON \
+          -DAPI_nanoFramework.System.Net.WebSockets=ON \
+          -DAPI_nanoFramework.System.Net.WebSockets.Client=ON \
+          -DESP32_ETHERNET_SUPPORT=ON \
+          -DESP32_ETHERNET_PHY=W5500 \
+          -DESP32_ETHERNET_SCLK_PIN=13 \
+          -DESP32_ETHERNET_MISO_PIN=12 \
+          -DESP32_ETHERNET_MOSI_PIN=11 \
+          -DESP32_ETHERNET_CS_PIN=14 \
+          -DESP32_ETHERNET_INT_PIN=10 \
+          -DESP32_ETHERNET_RESET_PIN=9 \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -B build \
+          -S .
+
+    - name: Build Firmware (with ccache)
+      working-directory: nf-interpreter
+      run: |
+        source ~/esp/esp-idf/export.sh
+        
+        # Show ccache stats
+        ccache --show-stats
+        
+        # Build the firmware
+        cmake --build build --target all --config ${{ matrix.cmake_build_type }}
+        
+        # Show final ccache stats
+        ccache --show-stats
+
+    - name: Create Firmware Package
+      working-directory: nf-interpreter/build
+      run: |
+        source ~/esp/esp-idf/export.sh
+        
+        # Generate binary files
+        esptool.py --chip esp32s3 elf2image --flash_mode dio --flash_freq 80m --flash_size 8MB nanoCLR.elf -o nanoCLR.bin
+        
+        # Create partition table
+        cat > partitions.csv << EOF
+        # Name,   Type, SubType, Offset,  Size, Flags
+        nvs,      data, nvs,     0x9000,  0x6000,
+        phy_init, data, phy,     0xf000,  0x1000,
+        factory,  app,  factory, 0x10000, 0x7F0000,
+        EOF
+        
+        # Generate partition binary
+        python $HOME/esp/esp-idf/components/partition_table/gen_esp32part.py partitions.csv partitions.bin
+
+    - name: Upload Build Cache
+      if: github.ref == 'refs/heads/main'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.CCACHE_DIR }}
+          nf-interpreter/build
+        key: ${{ steps.cache-keys.outputs.ccache_key }}-updated
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ESP32-S3-W5500-${{ matrix.build_type }}-${{ github.sha }}
+        path: |
+          nf-interpreter/build/nanoCLR.bin
+          nf-interpreter/build/nanoCLR.elf
+          nf-interpreter/build/nanoBooter.bin
+          nf-interpreter/build/nanoBooter.elf
+          nf-interpreter/build/partitions.bin
+          nf-interpreter/build/bootloader/bootloader.bin
+          nf-interpreter/build/*.map
+          nf-interpreter/build/*.hex
+          nf-interpreter/build/*.dfu
+        retention-days: 30
+
+    - name: Build Summary
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Target**: ESP32-S3 + W5500" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Type**: ${{ matrix.build_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **ESP-IDF**: ${{ env.ESP_IDF_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Cache Hit ESP-IDF**: ${{ steps.cache-esp-idf.outputs.cache-hit }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Time**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+        
+        # Check file sizes
+        if [ -f "nf-interpreter/build/nanoCLR.bin" ]; then
+          echo "- **nanoCLR.bin**: $(stat -c%s nf-interpreter/build/nanoCLR.bin) bytes" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f "nf-interpreter/build/nanoBooter.bin" ]; then
+          echo "- **nanoBooter.bin**: $(stat -c%s nf-interpreter/build/nanoBooter.bin) bytes" >> $GITHUB_STEP_SUMMARY
+        fi
