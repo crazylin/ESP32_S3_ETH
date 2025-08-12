@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Setup Python 3.7
         uses: actions/setup-python@v4
@@ -21,10 +22,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git wget flex bison gperf python3-pip python3-setuptools cmake ninja-build ccache libffi-dev libssl-dev dfu-util
+          sudo apt-get install -y \
+            git wget flex bison gperf python3-pip python3-setuptools cmake ninja-build ccache libffi-dev libssl-dev dfu-util
           python3 -m pip install --upgrade pip
 
-      - name: Install ESP-IDF v5.0 (stable)
+      - name: Install ESP-IDF v5.0
         run: |
           mkdir -p $HOME/esp
           cd $HOME/esp
@@ -38,10 +40,11 @@ jobs:
       - name: Clone nf-interpreter repository
         run: git clone --recursive https://github.com/nanoframework/nf-interpreter.git
 
-      - name: Build nanoFramework firmware for ESP32_S3
+      - name: Build nanoFramework ESP32-S3 firmware
         env:
           IDF_PATH: $HOME/esp/esp-idf-v5.0
         run: |
-          cd nf-interpreter
           source $HOME/esp/esp-idf-v5.0/export.sh
-          ./build.sh ESP32_S3
+          cd nf-interpreter/targets/esp32
+          idf.py set-target esp32s3
+          idf.py build
