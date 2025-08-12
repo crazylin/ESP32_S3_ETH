@@ -110,10 +110,62 @@ jobs:
             if ./install.sh --targets esp32s3; then
               echo "✓ Specific toolchain installation completed"
             else
-              echo "All installation methods failed!"
-              echo "Available installation options:"
-              ./install.sh --help | head -20
-              exit 1
+              echo "Method 3 failed, trying Method 4: Manual toolchain installation..."
+              
+              # 手动下载并安装 ESP32-S3 工具链
+              echo "Downloading ESP32-S3 toolchain manually..."
+              mkdir -p "$HOME/.espressif/tools/xtensa-esp32s3-elf"
+              cd "$HOME/.espressif/tools/xtensa-esp32s3-elf"
+              
+              # 下载 ESP32-S3 工具链 (使用官方预编译版本)
+              echo "Attempting to download ESP32-S3 toolchain..."
+              
+              # 尝试多个可能的工具链版本
+              TOOLCHAIN_VERSIONS=(
+                "12.1_20221002"
+                "11.2_20220808"
+                "10.4_20230516"
+              )
+              
+              TOOLCHAIN_DOWNLOADED=false
+              for version in "${TOOLCHAIN_VERSIONS[@]}"; do
+                echo "Trying toolchain version: $version"
+                TOOLCHAIN_URL="https://github.com/espressif/crosstool-NG/releases/download/esp-${version}/xtensa-esp32s3-elf-${version}-x86_64-linux-gnu.tar.gz"
+                
+                echo "Downloading from: $TOOLCHAIN_URL"
+                if curl -L -o toolchain.tar.gz "$TOOLCHAIN_URL"; then
+                  echo "Toolchain downloaded successfully, extracting..."
+                  if tar -xzf toolchain.tar.gz; then
+                    echo "✓ Toolchain extracted successfully"
+                    # 移动文件到正确位置
+                    if [ -d "xtensa-esp32s3-elf" ]; then
+                      mv xtensa-esp32s3-elf/* .
+                      rmdir xtensa-esp32s3-elf
+                      echo "✓ ESP32-S3 toolchain installed manually (version: $version)"
+                      TOOLCHAIN_DOWNLOADED=true
+                      break
+                    else
+                      echo "✗ Toolchain extraction failed - unexpected directory structure for version $version"
+                      rm -f toolchain.tar.gz
+                      continue
+                    fi
+                  else
+                    echo "✗ Toolchain extraction failed for version $version"
+                    rm -f toolchain.tar.gz
+                    continue
+                  fi
+                else
+                  echo "✗ Toolchain download failed for version $version"
+                  continue
+                fi
+              done
+              
+              if [ "$TOOLCHAIN_DOWNLOADED" = false ]; then
+                echo "✗ All toolchain versions failed to download/install"
+                exit 1
+              fi
+              
+              cd ~/esp/esp-idf
             fi
           fi
         fi
@@ -121,6 +173,29 @@ jobs:
         # 等待一下确保安装完成
         echo "Waiting for installation to complete..."
         sleep 5
+        
+        # 检查安装日志和状态
+        echo "=== Installation Status Check ==="
+        echo "ESP-IDF tools directory contents:"
+        ls -la ~/.espressif/tools/ 2>/dev/null || echo "No tools directory found"
+        
+        echo "ESP-IDF installation logs:"
+        if [ -f ~/.espressif/logs/install.log ]; then
+          echo "Recent install log entries:"
+          tail -50 ~/.espressif/logs/install.log | grep -E "(error|fail|warning|toolchain|xtensa)" || echo "No relevant log entries found"
+        else
+          echo "No install log found"
+        fi
+        
+        echo "ESP-IDF version and status:"
+        cd ~/esp/esp-idf
+        echo "Current directory: $(pwd)"
+        echo "ESP-IDF version: $(git describe --tags --abbrev=0 2>/dev/null || echo 'Unknown')"
+        echo "ESP-IDF commit: $(git rev-parse HEAD 2>/dev/null || echo 'Unknown')"
+        
+        # 检查 ESP-IDF 工具脚本
+        echo "ESP-IDF tools availability:"
+        ls -la tools/ | grep -E "(install|idf)" || echo "No tool scripts found"
         
         # 验证安装
         echo "=== ESP-IDF Installation Verification ==="
@@ -137,6 +212,14 @@ jobs:
           find "$HOME/.espressif/tools/xtensa-esp32s3-elf" -name "*gcc" -type f
           echo "Toolchain bin directory:"
           ls -la "$HOME/.espressif/tools/xtensa-esp32s3-elf/bin/" || echo "No bin directory found"
+          
+          # 验证关键工具是否存在
+          if [ -f "$HOME/.espressif/tools/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc" ]; then
+            echo "✓ ESP32-S3 GCC compiler found"
+            echo "GCC version: $($HOME/.espressif/tools/xtensa-esp32s3-elf/bin/xtensa-esp32s3-elf-gcc --version | head -1)"
+          else
+            echo "✗ ESP32-S3 GCC compiler not found"
+          fi
         else
           echo "✗ ESP32-S3 toolchain directory not found"
           echo "Available toolchains:"
@@ -149,6 +232,16 @@ jobs:
           # 检查是否有任何工具链
           echo "All available tools:"
           find "$HOME/.espressif/tools" -type d 2>/dev/null | head -20
+          
+          # 检查系统是否已经有 ESP32-S3 工具链
+          echo "Checking system for ESP32-S3 toolchain..."
+          if command -v xtensa-esp32s3-elf-gcc >/dev/null 2>&1; then
+            echo "✓ ESP32-S3 toolchain found in system PATH"
+            echo "GCC version: $(xtensa-esp32s3-elf-gcc --version | head -1)"
+            echo "GCC path: $(which xtensa-esp32s3-elf-gcc)"
+          else
+            echo "✗ ESP32-S3 toolchain not found in system PATH"
+          fi
           
           echo "✗ Failed to install ESP32-S3 toolchain"
           exit 1
