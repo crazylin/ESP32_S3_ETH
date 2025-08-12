@@ -136,9 +136,13 @@
 - `CMakeLists-patch-updated.txt` - CMake补丁文件
 - `build-esp32-s3-w5500.sh` - 本地构建脚本（已更新）
 - `.github/workflows/build-esp32s3-w5500.yml` - GitHub Actions工作流（已更新）
+- `.github/workflows/build-esp32s3-w5500-windows.yml` - Windows专用工作流
+- `build-esp32-s3-w5500-windows.cmd` - Windows构建脚本
 
 ### 验证工具
 - `test-build-fix.sh` - 构建验证脚本
+- `test-build-fix-windows.cmd` - Windows构建验证脚本
 - `BUILD_FIXES.md` - 详细修复文档
+- `BUILD_WINDOWS.md` - Windows构建指南
 
 所有主要问题已修复，构建系统应该能够成功完成ESP32-S3 + W5500 nanoFramework固件的构建。

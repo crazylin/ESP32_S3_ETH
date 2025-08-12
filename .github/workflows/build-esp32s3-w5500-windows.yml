@@ -94,7 +94,7 @@ jobs:
         
         # 验证安装
         python -m pip install --upgrade pip
-        python -m pip install -r requirements.txt
+        python -m pip install -r C:\esp\esp-idf\tools\requirements\requirements.core.txt
 
     - name: Cache ESP-IDF Tools
       uses: actions/cache@v3
