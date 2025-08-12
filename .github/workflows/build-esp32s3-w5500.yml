@@ -885,6 +885,22 @@ jobs:
     - name: Copy Custom CMake Presets
       run: |
         cp nanobuild-scripts/CMakePresets-W5500.json nf-interpreter/CMakePresets.json
+        
+    - name: Apply CMake Patches
+      run: |
+        # 创建补丁目录
+        mkdir -p nf-interpreter/targets/ESP32/_IDF/
+        
+        # 复制CMake补丁文件以解决NF_Debugger缺失问题
+        if [ -f "nanobuild-scripts/CMakeLists-patch-updated.txt" ]; then
+          cp nanobuild-scripts/CMakeLists-patch-updated.txt nf-interpreter/targets/ESP32/_IDF/CMakeLists-patch.cmake
+          echo "✓ CMakeLists patch applied successfully"
+        else
+          echo "⚠ CMakeLists-patch-updated.txt not found, skipping patch application"
+        fi
+        
+        # 验证补丁文件已复制
+        ls -la nf-interpreter/targets/ESP32/_IDF/
 
     - name: Verify ESP-IDF Environment
       run: |

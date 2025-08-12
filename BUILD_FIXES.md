@@ -108,6 +108,19 @@
 - `build/partition_table/partition-table.bin`
 - 相关调试文件（.elf格式）
 
+### 4. 调试器依赖缺失修复
+**症状**: `ninja: error: 'NF_Debugger', needed by 'nanoCLR.elf', missing and no known rule to make it`
+**修复**: 
+- 创建空的NF_Debugger接口库目标
+- 在Release模式下禁用调试器功能
+- 应用CMake补丁自动处理依赖关系
+
+**应用补丁**:
+```bash
+# 在nf-interpreter目录中应用补丁
+cp ../CMakeLists-patch-updated.txt targets/ESP32/_IDF/CMakeLists-patch.cmake
+```
+
 ## 故障排除
 
 如果仍然遇到问题：

@@ -119,6 +119,12 @@ if [ -d "build" ]; then
     rm -rf build
 fi
 
+# 复制CMake补丁到nf-interpreter目录
+if [ -f "../CMakeLists-patch-updated.txt" ]; then
+    echo "✓ 复制CMake补丁文件..."
+    cp ../CMakeLists-patch-updated.txt targets/ESP32/_IDF/CMakeLists-patch.cmake
+fi
+
 # 使用CMake预设配置构建
 echo "✓ 使用CMake预设配置构建..."
 if [ "$BUILD_TYPE" = "Debug" ]; then

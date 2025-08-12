@@ -1,0 +1,51 @@
+# nanoFramework ESP32-S3 W5500 调试器依赖修复补丁
+# 解决 ninja: error: 'NF_Debugger', needed by 'nanoCLR.elf', missing 问题
+
+# 检查是否正在构建nf-interpreter
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/targets")
+    message(STATUS "应用ESP32-S3 W5500调试器依赖修复...")
+    
+    # 在Release模式下禁用调试器库
+    if(NOT NF_FEATURE_DEBUGGER OR NF_FEATURE_DEBUGGER STREQUAL "OFF")
+        message(STATUS "调试器功能已禁用 - 创建空NF_Debugger目标")
+        
+        # 创建一个空的调试器库目标以避免依赖问题
+        if(NOT TARGET NF_Debugger)
+            add_library(NF_Debugger INTERFACE)
+            message(STATUS "已创建空的NF_Debugger接口库")
+        endif()
+        
+        # 确保调试器相关的源文件变量为空
+        set(NF_Debugger_SOURCES "")
+        set(NF_Debugger_INCLUDE_DIRS "")
+        set(NF_Debugger_LINK_LIBRARIES "")
+        
+        # 定义宏来禁用调试器功能
+        add_definitions(-DNANOCLR_NO_DEBUGGER=1)
+        
+    else()
+        message(STATUS "调试器功能已启用 - 将链接真实的NF_Debugger库")
+    endif()
+
+    # 确保ESP32目标存在
+    if(NOT TARGET esp32)
+        message(STATUS "创建ESP32兼容接口目标...")
+        add_library(esp32 INTERFACE)
+        target_link_libraries(esp32 INTERFACE idf::esp32)
+    endif()
+
+    # 添加W5500以太网支持
+    if(ESP32_ETHERNET_SUPPORT)
+        message(STATUS "W5500以太网支持已启用")
+        add_definitions(-DESP32_ETHERNET_SUPPORTED=1)
+    endif()
+
+    # 修复ESP32-S3特定的编译标志
+    if(IDF_TARGET STREQUAL "esp32s3")
+        message(STATUS "ESP32-S3目标检测 - 应用特定修复")
+        add_definitions(-DESP32S3=1)
+    endif()
+
+else()
+    message(WARNING "未在nf-interpreter目录中，跳过调试器修复补丁")
+endif()
