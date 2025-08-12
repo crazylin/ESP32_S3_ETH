@@ -100,9 +100,12 @@ jobs:
       uses: actions/cache@v3
       id: cache-esp-idf-tools
       with:
-        path: C:\Espressif
-        key: ${{ runner.os }}-esp-idf-tools-${{ env.ESP_IDF_VERSION }}
+        path: |
+          C:\Espressif
+          C:\esp\esp-idf\tools
+        key: ${{ runner.os }}-esp-idf-tools-${{ env.ESP_IDF_VERSION }}-${{ hashFiles('C:\esp\esp-idf\tools\requirements\*.txt') }}
         restore-keys: |
+          ${{ runner.os }}-esp-idf-tools-${{ env.ESP_IDF_VERSION }}-
           ${{ runner.os }}-esp-idf-tools-
 
     - name: Install Build Tools
@@ -124,12 +127,38 @@ jobs:
         ninja --version
         git --version
 
+    - name: Install ESP-IDF Tools
+      shell: pwsh
+      run: |
+        Write-Host "=== Installing ESP-IDF Tools ==="
+        
+        $env:IDF_PATH = "C:\esp\esp-idf"
+        $env:IDF_TOOLS_PATH = "C:\Espressif"
+        
+        # 确保ESP-IDF已安装
+        if (-not (Test-Path $env:IDF_PATH)) {
+            Write-Host "❌ ESP-IDF not found at $env:IDF_PATH" -ForegroundColor Red
+            exit 1
+        }
+        
+        # 安装ESP-IDF工具（包括ESP32-S3工具链）
+        Push-Location $env:IDF_PATH
+        try {
+            Write-Host "Installing ESP-IDF tools for ESP32-S3..." -ForegroundColor Yellow
+            .\install.bat esp32s3
+            Write-Host "✅ ESP-IDF tools installation completed" -ForegroundColor Green
+        } catch {
+            Write-Host "❌ ESP-IDF tools installation failed: $_" -ForegroundColor Red
+            exit 1
+        } finally {
+            Pop-Location
+        }
+
     - name: Setup ESP-IDF Environment
       shell: pwsh
       run: |
         Write-Host "=== Setting up ESP-IDF Environment ==="
         
-        # 加载ESP-IDF环境
         $env:IDF_PATH = "C:\esp\esp-idf"
         $env:IDF_TOOLS_PATH = "C:\Espressif"
         
@@ -137,22 +166,24 @@ jobs:
         $exportScript = "$env:IDF_PATH\export.ps1"
         if (Test-Path $exportScript) {
             . $exportScript
+        } else {
+            Write-Host "❌ ESP-IDF export script not found" -ForegroundColor Red
+            exit 1
         }
         
-        # 验证工具链
-        Write-Host "ESP-IDF Path: $env:IDF_PATH"
-        Write-Host "ESP-IDF Tools Path: $env:IDF_TOOLS_PATH"
-        Write-Host "Python Version: $(python --version)"
-        Write-Host "CMake Version: $(cmake --version)"
-        Write-Host "Ninja Version: $(ninja --version)"
+        # 验证ESP-IDF环境
+        Write-Host "✅ ESP-IDF Environment Setup Complete" -ForegroundColor Green
+        Write-Host "IDF_PATH: $env:IDF_PATH"
+        Write-Host "IDF_TOOLS_PATH: $env:IDF_TOOLS_PATH"
+        Write-Host "Python: $(python --version)"
         
-        # 检查ESP32-S3工具链
-        $xtensaPath = "C:\Espressif\tools\xtensa-esp32s3-elf\*\xtensa-esp32s3-elf\bin"
-        if (Test-Path $xtensaPath) {
-            Write-Host "ESP32-S3 toolchain found"
-            $env:PATH = "$xtensaPath;$env:PATH"
+        # 验证ESP32-S3工具链
+        $xtensaGcc = Get-Command "xtensa-esp32s3-elf-gcc" -ErrorAction SilentlyContinue
+        if ($xtensaGcc) {
+            Write-Host "✅ ESP32-S3 toolchain: $($xtensaGcc.Source)" -ForegroundColor Green
         } else {
-            Write-Host "ESP32-S3 toolchain not found"
+            Write-Host "❌ ESP32-S3 toolchain not found" -ForegroundColor Red
+            exit 1
         }
 
     - name: Copy Custom CMake Presets
@@ -183,16 +214,13 @@ jobs:
         $env:IDF_PATH = "C:\esp\esp-idf"
         $env:IDF_TOOLS_PATH = "C:\Espressif"
         
-        # 导出ESP-IDF环境
+        # 导出ESP-IDF环境（包含工具链路径）
         $exportScript = "$env:IDF_PATH\export.ps1"
         if (Test-Path $exportScript) {
             . $exportScript
-        }
-        
-        # 设置工具链路径
-        $xtensaPath = Get-ChildItem -Path "C:\Espressif\tools\xtensa-esp32s3-elf" -Directory | Select-Object -First 1
-        if ($xtensaPath) {
-            $env:PATH = "$($xtensaPath.FullName)\xtensa-esp32s3-elf\bin;$env:PATH"
+        } else {
+            Write-Host "❌ ESP-IDF export script not found" -ForegroundColor Red
+            exit 1
         }
         
         # 验证工具
@@ -200,7 +228,15 @@ jobs:
         Write-Host "Python: $(python --version)"
         Write-Host "CMake: $(cmake --version)"
         Write-Host "Ninja: $(ninja --version)"
-        Write-Host "Xtensa GCC: $(xtensa-esp32s3-elf-gcc --version | Select-Object -First 1)"
+        
+        # 验证ESP32-S3工具链
+        $xtensaGcc = Get-Command "xtensa-esp32s3-elf-gcc" -ErrorAction SilentlyContinue
+        if ($xtensaGcc) {
+            Write-Host "✅ Xtensa GCC: $(xtensa-esp32s3-elf-gcc --version | Select-Object -First 1)" -ForegroundColor Green
+        } else {
+            Write-Host "❌ ESP32-S3 toolchain not found in PATH" -ForegroundColor Red
+            exit 1
+        }
         
         # 配置构建
         if ("${{ matrix.build_type }}" -eq "Release") {

@@ -168,23 +168,82 @@ path: |
 | 后续构建 | 25-30分钟 | 2-3分钟 | 90% |
 | 工具链更新 | 25-30分钟 | 5-8分钟 | 75% |
 
-## 🚀 快速诊断
+## 🚀 Windows缓存特别说明
 
-### 一键缓存检查脚本
-```bash
-#!/bin/bash
-echo "=== ESP-IDF Cache Check ==="
-echo "ESP-IDF directory: $(ls -la ~/esp/esp-idf 2>/dev/null || echo 'NOT FOUND')"
-echo "espressif directory: $(du -sh ~/.espressif 2>/dev/null || echo 'NOT FOUND')"
-echo "Python env: $(ls -la ~/.espressif/python_env 2>/dev/null || echo 'NOT FOUND')"
-echo "Tools: $(ls -la ~/.espressif/tools 2>/dev/null || echo 'NOT FOUND')"
+### Windows缓存行为
+在Windows GitHub Actions中，缓存未命中是**完全正常**的：
+
+```
+Cache not found for input keys: Windows-esp-idf-tools-v5.2.3
 ```
 
-### 缓存强制更新
-```bash
-# 在PR描述中添加 [cache-update] 强制更新缓存
-# 或手动触发workflow_dispatch
+**这不是错误**，而是首次运行的预期行为。
+
+### Windows缓存路径
+```yaml
+# Windows专用缓存配置
+- name: Cache ESP-IDF Tools
+  uses: actions/cache@v3
+  with:
+    path: |
+      C:\Espressif
+      C:\esp\esp-idf\tools
+    key: ${{ runner.os }}-esp-idf-tools-${{ env.ESP_IDF_VERSION }}-${{ hashFiles('C:\esp\esp-idf\tools\requirements\*.txt') }}
+    restore-keys: |
+      ${{ runner.os }}-esp-idf-tools-${{ env.ESP_IDF_VERSION }}-
+      ${{ runner.os }}-esp-idf-tools-
 ```
+
+### Windows缓存检查
+```powershell
+# Windows缓存检查脚本
+Write-Host "=== Windows ESP-IDF Cache Check ==="
+Write-Host "ESP-IDF directory: $(Test-Path C:\esp\esp-idf)"
+Write-Host "Espressif directory: $(Test-Path C:\Espressif)"
+Write-Host "ESP-IDF tools: $(Get-ChildItem C:\Espressif\tools -Directory | Select-Object -ExpandProperty Name)"
+Write-Host "Cache size: $([math]::Round((Get-ChildItem C:\Espressif -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1GB, 2)) GB"
+```
+
+### Windows缓存性能
+| 运行次数 | 缓存状态 | 构建时间 | 说明 |
+|----------|----------|----------|------|
+| 第1次 | 未命中 | 15-20分钟 | 正常：首次创建缓存 |
+| 第2次 | 命中 | 3-5分钟 | 正常：使用缓存 |
+| 版本更新 | 未命中 | 15-20分钟 | 正常：ESP-IDF版本变更 |
+
+### 快速诊断
+
+#### Windows缓存验证
+```powershell
+# 运行Windows缓存诊断
+.\troubleshoot-windows-build.ps1 -Verbose
+
+# 检查缓存状态
+if (Test-Path C:\Espressif) {
+    Write-Host "✅ ESP-IDF工具已缓存"
+    Get-ChildItem C:\Espressif\tools -Directory | ForEach-Object {
+        Write-Host "  $($_.Name): $($_.LastWriteTime)"
+    }
+} else {
+    Write-Host "⚠️  ESP-IDF工具未缓存（首次运行正常）"
+}
+```
+
+#### 缓存强制更新
+```yaml
+# 手动触发缓存刷新
+on:
+  workflow_dispatch:
+    inputs:
+      refresh_cache:
+        description: 'Force refresh ESP-IDF cache'
+        type: boolean
+        default: false
+```
+
+---
+
+**重要提醒**：在Windows GitHub Actions中，缓存未命中是**完全正常**的行为，特别是在首次运行或ESP-IDF版本更新时。后续运行将显著加速！
 
 ---
 

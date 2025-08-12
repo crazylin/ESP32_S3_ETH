@@ -25,6 +25,32 @@
 - ✅ CMakeLists-patch-updated.txt: 包含调试器修复补丁
 - ✅ GitHub Actions工作流: 已更新包含补丁应用步骤
 
+### 已修复的问题
+
+#### 1. JSON语法错误修复 ✅
+- **问题**: CMakePresets-W5500.json存在JSON语法错误
+- **症状**: GitHub Actions构建失败，提示JSON解析错误
+- **修复**: 重新创建CMakePresets-W5500.json，移除重复键，通过JSON验证
+- **验证**: `python -m json.tool CMakePresets-W5500.json` 无错误输出
+
+#### 2. 调试器依赖缺失修复 ✅
+- **问题**: Release模式下缺少'NF_Debugger'目标
+- **症状**: ninja报错 "ninja: error: unknown target 'NF_Debugger'"
+- **修复**: 创建CMakeLists-patch-updated.txt补丁，在Release模式下生成空接口库
+- **验证**: 构建配置成功，无调试器依赖错误
+
+#### 3. Windows构建requirements.txt路径修复 ✅
+- **问题**: GitHub Actions Windows工作流中requirements.txt路径错误
+- **症状**: ERROR: Could not open requirements file: [Errno 2] No such file or directory
+- **修复**: 使用正确的ESP-IDF requirements路径: `C:\esp\esp-idf\tools\requirements\requirements.core.txt`
+- **验证**: 工作流成功安装所有Python依赖
+
+#### 4. Windows构建环境支持 ✅
+- **问题**: 原工作流仅支持Ubuntu环境
+- **症状**: 无法在Windows主机上构建
+- **修复**: 创建Windows专用工作流和构建指南
+- **验证**: 支持Windows 10/11 + ESP-IDF v5.2.3构建环境
+
 ### 构建预设配置
 
 #### Release模式 (ESP32_S3_W5500_Release)
