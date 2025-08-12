@@ -465,7 +465,7 @@ jobs:
               # 尝试编译为 ESP32-S3 目标
               if $ESP32S3_TOOLCHAIN_PATH/bin/$COMPILER_NAME -march=xtensa -mcpu=esp32s3 -o /tmp/test_esp32s3 "$TEST_FILE" 2>/dev/null; then
                 echo "✓ ESP32-S3 compilation test successful"
-                rm -f "$TEST_FILE" /tmp/test_esp32s3"
+                rm -f "$TEST_FILE" /tmp/test_esp32s3
               else
                 echo "⚠ ESP32-S3 compilation test failed - trying generic Xtensa target"
                 # 尝试通用 Xtensa 目标
