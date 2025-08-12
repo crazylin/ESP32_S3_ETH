@@ -61,20 +61,34 @@
    ninja --version
    ```
 
-2. **配置验证**:
+2. **JSON语法验证**:
+   ```bash
+   python -m json.tool CMakePresets-W5500.json
+   ```
+
+3. **配置验证**:
    ```bash
    cmake --preset ESP32_S3_W5500_Release
    ```
 
-3. **构建验证**:
+4. **构建验证**:
    ```bash
    cmake --build build --target all
    ```
 
-4. **结果验证**:
+5. **结果验证**:
    - 检查`build/`目录中的固件文件
    - 验证`bootloader.bin`和`partitions.bin`存在
    - 确认构建日志无错误
+
+## JSON语法错误修复
+
+**问题**: JSON Parse Error: Duplicate key和Extra non-whitespace
+**修复**:
+- 移除重复的`NF_DEBUGGER_NO_PORT`键
+- 移除重复的变量定义
+- 清理文件末尾的多余字符
+- 验证JSON语法正确性
 
 ## 预期结果
 

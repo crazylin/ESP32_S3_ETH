@@ -20,7 +20,6 @@
         "NF_WP_IMPLEMENTS_CRC32": "OFF",
         "NF_FEATURE_HAS_SDCARD": "ON",
         "NF_FEATURE_HAS_CONFIG_BLOCK": "ON",
-        "NF_DEBUGGER_NO_PORT": "ON",
         "NF_FEATURE_BUILD_ALL": "OFF",
         "ESP32_IDF_PATH": "/home/runner/esp/esp-idf",
         "IDF_TARGET": "esp32s3",
@@ -69,11 +68,6 @@
         "NF_FEATURE_DEBUGGER_SSL": "OFF",
         "NF_FEATURE_WATCHDOG": "ON",
         "NF_PLATFORM_NO_CLR_WARNINGS": "ON",
-        "SUPPORT_ANY_BASE_CONVERSION": "ON",
-        "NF_FEATURE_HAS_DEBUGGER": "OFF",
-        "NF_FEATURE_DEBUGGER_V2": "OFF",
-        "NF_FEATURE_WATCHDOG": "ON",
-        "NF_PLATFORM_NO_CLR_WARNINGS": "ON",
         "SUPPORT_ANY_BASE_CONVERSION": "ON"
       }
     },
@@ -95,7 +89,6 @@
         "NF_BUILD_RTM": "OFF",
         "NF_FEATURE_HAS_SDCARD": "ON",
         "NF_FEATURE_HAS_CONFIG_BLOCK": "ON",
-        "NF_DEBUGGER_NO_PORT": "OFF",
         "NF_FEATURE_BUILD_ALL": "OFF",
         "ESP32_IDF_PATH": "/home/runner/esp/esp-idf",
         "IDF_TARGET": "esp32s3",
