@@ -1,0 +1,308 @@
+name: Build ESP32-S3 + W5500 nanoFramework Firmware (Windows)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
+      upload_artifacts:
+        description: 'Upload artifacts'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  ESP_IDF_VERSION: v5.2.3
+  NANOFRAMEWORK_VERSION: latest
+  IDF_TOOLS_PATH: C:\Espressif
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        build_type: ["${{ github.event.inputs.build_type || 'Release' }}"]
+        include:
+          - build_type: Release
+            cmake_build_type: MinSizeRel
+            rtm: ON
+            debugger: OFF
+          - build_type: Debug
+            cmake_build_type: Debug
+            rtm: OFF
+            debugger: ON
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        path: nanobuild-scripts
+
+    - name: Checkout nanoFramework
+      uses: actions/checkout@v4
+      with:
+        repository: nanoframework/nf-interpreter
+        path: nf-interpreter
+        submodules: recursive
+        fetch-depth: 0
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Setup Visual Studio 2022
+      uses: microsoft/setup-msbuild@v1.3
+      with:
+        vs-version: '[17.0,18.0)'
+
+    - name: Install ESP-IDF Tools for Windows
+      shell: pwsh
+      run: |
+        Write-Host "=== Setting up ESP-IDF Tools for Windows ==="
+        
+        # 设置ESP-IDF路径
+        $env:IDF_TOOLS_PATH = "C:\Espressif"
+        
+        # 创建ESP-IDF目录
+        New-Item -ItemType Directory -Force -Path "C:\esp"
+        
+        # 克隆ESP-IDF
+        if (-not (Test-Path "C:\esp\esp-idf")) {
+            git clone -b $env:ESP_IDF_VERSION --recursive https://github.com/espressif/esp-idf.git C:\esp\esp-idf
+        }
+        
+        # 设置环境变量
+        echo "IDF_PATH=C:\esp\esp-idf" >> $env:GITHUB_ENV
+        echo "C:\esp\esp-idf\tools" >> $env:GITHUB_PATH
+        
+        # 安装ESP-IDF工具
+        cd C:\esp\esp-idf
+        .\install.bat esp32s3
+        
+        # 导出环境变量
+        .\export.bat
+        
+        # 验证安装
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+
+    - name: Cache ESP-IDF Tools
+      uses: actions/cache@v3
+      id: cache-esp-idf-tools
+      with:
+        path: C:\Espressif
+        key: ${{ runner.os }}-esp-idf-tools-${{ env.ESP_IDF_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-esp-idf-tools-
+
+    - name: Install Build Tools
+      shell: pwsh
+      run: |
+        Write-Host "=== Installing Build Tools ==="
+        
+        # 安装CMake
+        choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+        
+        # 安装Ninja
+        choco install ninja -y
+        
+        # 安装Git
+        choco install git -y
+        
+        # 验证安装
+        cmake --version
+        ninja --version
+        git --version
+
+    - name: Setup ESP-IDF Environment
+      shell: pwsh
+      run: |
+        Write-Host "=== Setting up ESP-IDF Environment ==="
+        
+        # 加载ESP-IDF环境
+        $env:IDF_PATH = "C:\esp\esp-idf"
+        $env:IDF_TOOLS_PATH = "C:\Espressif"
+        
+        # 导出ESP-IDF环境变量
+        $exportScript = "$env:IDF_PATH\export.ps1"
+        if (Test-Path $exportScript) {
+            . $exportScript
+        }
+        
+        # 验证工具链
+        Write-Host "ESP-IDF Path: $env:IDF_PATH"
+        Write-Host "ESP-IDF Tools Path: $env:IDF_TOOLS_PATH"
+        Write-Host "Python Version: $(python --version)"
+        Write-Host "CMake Version: $(cmake --version)"
+        Write-Host "Ninja Version: $(ninja --version)"
+        
+        # 检查ESP32-S3工具链
+        $xtensaPath = "C:\Espressif\tools\xtensa-esp32s3-elf\*\xtensa-esp32s3-elf\bin"
+        if (Test-Path $xtensaPath) {
+            Write-Host "ESP32-S3 toolchain found"
+            $env:PATH = "$xtensaPath;$env:PATH"
+        } else {
+            Write-Host "ESP32-S3 toolchain not found"
+        }
+
+    - name: Copy Custom CMake Presets
+      shell: pwsh
+      run: |
+        Copy-Item -Path "nanobuild-scripts\CMakePresets-W5500.json" -Destination "nf-interpreter\CMakePresets.json" -Force
+        
+    - name: Apply CMake Patches
+      shell: pwsh
+      run: |
+        # 创建补丁目录
+        New-Item -ItemType Directory -Force -Path "nf-interpreter\targets\ESP32\_IDF"
+        
+        # 复制CMake补丁文件
+        if (Test-Path "nanobuild-scripts\CMakeLists-patch-updated.txt") {
+            Copy-Item -Path "nanobuild-scripts\CMakeLists-patch-updated.txt" -Destination "nf-interpreter\targets\ESP32\_IDF\CMakeLists-patch.cmake" -Force
+            Write-Host "✓ CMakeLists patch applied successfully"
+        } else {
+            Write-Host "⚠ CMakeLists-patch-updated.txt not found"
+        }
+
+    - name: Configure CMake with Preset
+      shell: pwsh
+      run: |
+        cd nf-interpreter
+        
+        # 加载ESP-IDF环境
+        $env:IDF_PATH = "C:\esp\esp-idf"
+        $env:IDF_TOOLS_PATH = "C:\Espressif"
+        
+        # 导出ESP-IDF环境
+        $exportScript = "$env:IDF_PATH\export.ps1"
+        if (Test-Path $exportScript) {
+            . $exportScript
+        }
+        
+        # 设置工具链路径
+        $xtensaPath = Get-ChildItem -Path "C:\Espressif\tools\xtensa-esp32s3-elf" -Directory | Select-Object -First 1
+        if ($xtensaPath) {
+            $env:PATH = "$($xtensaPath.FullName)\xtensa-esp32s3-elf\bin;$env:PATH"
+        }
+        
+        # 验证工具
+        Write-Host "=== Tool Verification ==="
+        Write-Host "Python: $(python --version)"
+        Write-Host "CMake: $(cmake --version)"
+        Write-Host "Ninja: $(ninja --version)"
+        Write-Host "Xtensa GCC: $(xtensa-esp32s3-elf-gcc --version | Select-Object -First 1)"
+        
+        # 配置构建
+        if ("${{ matrix.build_type }}" -eq "Release") {
+            Write-Host "Configuring Release build..."
+            cmake --preset ESP32_S3_W5500_Release
+        } else {
+            Write-Host "Configuring Debug build..."
+            cmake --preset ESP32_S3_W5500_Debug
+        }
+
+    - name: Build Firmware
+      shell: pwsh
+      run: |
+        cd nf-interpreter\build
+        cmake --build . --config ${{ matrix.cmake_build_type }} -- -j $env:NUMBER_OF_PROCESSORS
+
+    - name: Calculate Firmware Size
+      id: firmware_size
+      shell: pwsh
+      run: |
+        $firmwarePath = "nf-interpreter\build\nanoCLR.bin"
+        if (Test-Path $firmwarePath) {
+            $size = (Get-Item $firmwarePath).Length
+            $sizeMB = [math]::Round($size / 1MB, 2)
+            Write-Host "Firmware size: $sizeMB MB ($size bytes)"
+            echo "size=$size" >> $env:GITHUB_OUTPUT
+            echo "size_mb=$sizeMB" >> $env:GITHUB_OUTPUT
+        } else {
+            Write-Host "Firmware file not found"
+            exit 1
+        }
+
+    - name: Create Release Notes
+      shell: pwsh
+      run: |
+        $releaseNotes = @"
+        # ESP32-S3 + W5500 nanoFramework Firmware (Windows Build)
+        
+        ## Build Information
+        - **Build Type**: ${{ matrix.build_type }}
+        - **ESP-IDF Version**: ${{ env.ESP_IDF_VERSION }}
+        - **nanoFramework Version**: ${{ env.NANOFRAMEWORK_VERSION }}
+        - **Firmware Size**: ${{ steps.firmware_size.outputs.size_mb }} MB
+        - **Build Date**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        - **Commit**: ${{ github.sha }}
+        - **Build Platform**: Windows
+        
+        ## Hardware Configuration
+        - **Target**: ESP32-S3
+        - **Ethernet**: W5500 SPI Module
+        - **SPI Pins**:
+          - SCLK: GPIO13
+          - MISO: GPIO12
+          - MOSI: GPIO11
+          - CS: GPIO14
+          - INT: GPIO10
+          - RST: GPIO9
+        
+        ## Features
+        - ${{ matrix.build_type == 'Release' && '✅ Production optimized (RTM enabled)' || '✅ Full debugging support' }}
+        - ${{ matrix.build_type == 'Release' && '✅ Debugger disabled' || '✅ Debug symbols included' }}
+        - ${{ matrix.build_type == 'Release' && '✅ Size optimized' || '✅ Visual Studio debugging' }}
+        
+        ## Usage
+        1. Flash the firmware using nanoFramework Flash Tool
+        2. Connect W5500 module according to pin configuration
+        3. Use nanoFramework Visual Studio extension for development
+        
+        ## Windows Build Notes
+        - Built using Visual Studio 2022 toolchain
+        - ESP-IDF v5.2.3 with Windows native tools
+        - CMake + Ninja build system
+        
+        ## Downloads
+        - Firmware: `nanoCLR.bin`
+        - Release notes: `release-notes.md`
+        "@
+        
+        $releaseNotes | Out-File -FilePath "release-notes.md" -Encoding UTF8
+
+    - name: Upload Firmware Artifact
+      if: github.event.inputs.upload_artifacts != 'false'
+      uses: actions/upload-artifact@v4
+      with:
+        name: nanoFramework-ESP32S3-W5500-${{ matrix.build_type }}-Windows-${{ github.sha }}
+        path: |
+          nf-interpreter/build/nanoCLR.bin
+          nf-interpreter/build/nanoCLR.elf
+          release-notes.md
+        retention-days: 30
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/') && matrix.build_type == 'Release'
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release ${{ github.ref_name }} (Windows)
+        body_path: release-notes.md
+        files: |
+          nf-interpreter/build/nanoCLR.bin
+          nf-interpreter/build/nanoCLR.elf
+          release-notes.md
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
