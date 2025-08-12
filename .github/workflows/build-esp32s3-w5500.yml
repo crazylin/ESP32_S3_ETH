@@ -571,7 +571,8 @@ jobs:
             echo "ESP32S3_TOOLCHAIN_PATH=$ESP32S3_TOOLCHAIN" >> $GITHUB_ENV
           else
             echo "ESP32-S3 toolchain not found, trying to find any Xtensa toolchain..."
-            XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -1)
+            # 查找 Xtensa 工具链，但确保找到的是根目录而不是子目录
+            XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | grep -v "/include/" | grep -v "/lib/" | head -1)
             if [ -n "$XTENSA_TOOLCHAIN" ]; then
               echo "Found Xtensa toolchain: $XTENSA_TOOLCHAIN"
               echo "PATH=$XTENSA_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
@@ -586,13 +587,36 @@ jobs:
         fi
         
         # 查找并设置 Ninja 路径
-        NINJA_PATH=$(find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null | head -1)
+        echo "=== Searching for Ninja ==="
+        NINJA_PATH=""
+        
+        # 首先检查 ESP-IDF 工具目录
+        if [ -f "$HOME/esp/esp-idf/tools/ninja" ]; then
+          NINJA_PATH="$HOME/esp/esp-idf/tools/ninja"
+          echo "Found Ninja in ESP-IDF tools: $NINJA_PATH"
+        # 然后检查 .espressif 工具目录
+        elif [ -f "$HOME/.espressif/tools/ninja/1.10.2/ninja" ]; then
+          NINJA_PATH="$HOME/.espressif/tools/ninja/1.10.2/ninja"
+          echo "Found Ninja in .espressif tools: $NINJA_PATH"
+        # 最后尝试 find 命令
+        else
+          NINJA_PATH=$(find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null | head -1)
+          if [ -n "$NINJA_PATH" ]; then
+            echo "Found Ninja via find: $NINJA_PATH"
+          fi
+        fi
+        
         if [ -n "$NINJA_PATH" ]; then
-          echo "Found Ninja: $NINJA_PATH"
+          echo "✓ Ninja found: $NINJA_PATH"
           echo "PATH=$(dirname "$NINJA_PATH"):$PATH" >> $GITHUB_ENV
           echo "CMAKE_MAKE_PROGRAM=$NINJA_PATH" >> $GITHUB_ENV
         else
-          echo "Ninja not found!"
+          echo "✗ Ninja not found in any expected location!"
+          echo "Checking available tools:"
+          find "$HOME/.espressif/tools" -name "*ninja*" -type d 2>/dev/null || echo "No ninja directories found"
+          find "$HOME/.espressif/tools" -name "ninja" -type f 2>/dev/null || echo "No ninja files found"
+          echo "Checking ESP-IDF tools:"
+          ls -la "$HOME/esp/esp-idf/tools/" 2>/dev/null || echo "ESP-IDF tools directory not accessible"
           exit 1
         fi
         
