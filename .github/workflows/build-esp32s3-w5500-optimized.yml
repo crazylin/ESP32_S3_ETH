@@ -211,58 +211,11 @@ jobs:
         # Show ccache stats before build
         ccache --show-stats
         
-        # Configure build for ESP32-S3 with W5500
-        cmake -G Ninja \
-          -DCMAKE_BUILD_TYPE=${{ matrix.cmake_build_type }} \
-          -DCMAKE_TOOLCHAIN_FILE=$HOME/esp/esp-idf/tools/cmake/toolchain-esp32s3.cmake \
-          -DTOOLCHAIN_DIR=$HOME/esp/esp-idf/tools \
-          -DIDF_TARGET=esp32s3 \
-          -DTARGET_SERIES=ESP32_S3 \
-          -DTOOLCHAIN_PREFIX=xtensa-esp32s3-elf \
-          -DRTOS=ESP32 \
-          -DNF_BUILD_RTM=${{ matrix.rtm }} \
-          -DNF_FEATURE_DEBUGGER=${{ matrix.debugger }} \
-          -DNF_FEATURE_RTC=ON \
-          -DNF_FEATURE_HAS_SDCARD=ON \
-          -DNF_SECURITY_MBEDTLS=ON \
-          -DAPI_System.Device.Gpio=ON \
-          -DAPI_System.Device.Spi=ON \
-          -DAPI_System.Device.I2c=ON \
-          -DAPI_System.Device.Pwm=ON \
-          -DAPI_System.SerialCommunication=ON \
-          -DAPI_System.IO.FileSystem=ON \
-          -DAPI_Windows.Storage=ON \
-          -DAPI_System.Net=ON \
-          -DAPI_System.Net.NetworkInformation=ON \
-          -DAPI_System.Net.Sockets=ON \
-          -DAPI_System.Net.Http=ON \
-          -DAPI_System.Net.Security=ON \
-          -DAPI_nanoFramework.ResourceManager=ON \
-          -DAPI_nanoFramework.System.Collections=ON \
-          -DAPI_nanoFramework.System.Text=ON \
-          -DAPI_nanoFramework.Hardware.Esp32=ON \
-          -DAPI_nanoFramework.Networking=ON \
-          -DAPI_nanoFramework.Hardware.Esp32.Rmt=ON \
-          -DAPI_nanoFramework.System.IO.Streams=ON \
-          -DAPI_nanoFramework.Hardware.Esp32.Ble=ON \
-          -DAPI_nanoFramework.System.Net=ON \
-          -DAPI_nanoFramework.System.Net.Http=ON \
-          -DAPI_nanoFramework.System.Net.Sockets=ON \
-          -DAPI_nanoFramework.System.Net.Security=ON \
-          -DAPI_nanoFramework.System.Net.WebSockets=ON \
-          -DAPI_nanoFramework.System.Net.WebSockets.Client=ON \
-          -DESP32_ETHERNET_SUPPORT=ON \
-          -DESP32_ETHERNET_PHY=W5500 \
-          -DESP32_ETHERNET_SCLK_PIN=13 \
-          -DESP32_ETHERNET_MISO_PIN=12 \
-          -DESP32_ETHERNET_MOSI_PIN=11 \
-          -DESP32_ETHERNET_CS_PIN=14 \
-          -DESP32_ETHERNET_INT_PIN=10 \
-          -DESP32_ETHERNET_RESET_PIN=9 \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -B build \
-          -S .
+        # Configure build using CMake presets
+        cmake --preset ESP32_S3_W5500_${{ matrix.build_type }} -B build
+        
+        # Build the firmware
+        cmake --build build --target all --config ${{ matrix.cmake_build_type }}
 
     - name: Build Firmware (with ccache)
       working-directory: nf-interpreter
