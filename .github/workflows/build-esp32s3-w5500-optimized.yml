@@ -168,6 +168,11 @@ jobs:
         source ~/esp/esp-idf/export.sh
         echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+        
+        # Ensure Python packages are properly installed
+        python3 -m pip install --user click pyserial pyparsing
+        
+        # Verify installation
         idf.py --version
         xtensa-esp32s3-elf-gcc --version
 
