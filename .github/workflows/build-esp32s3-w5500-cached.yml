@@ -164,8 +164,9 @@ jobs:
         # Install ESP-IDF tools for ESP32-S3
         ./install.sh esp32s3
         
-        # Install all Python requirements including click
-        python3 -m pip install -r requirements.txt click pyserial pyparsing
+        # Install all Python requirements from ESP-IDF requirements
+        python3 -m pip install -r tools/requirements/requirements.core.txt
+        python3 -m pip install click pyserial pyparsing
         
         # Export environment
         source export.sh
@@ -180,8 +181,14 @@ jobs:
         echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
         
-        # Ensure Python dependencies are available (cached or not)
-        python3 -m pip install click pyserial pyparsing || echo "Python packages already installed"
+        # Debug Python dependencies
+        echo "Checking Python dependencies..."
+        python3 -c "import click; print('click version:', click.__version__)" || echo "click missing"
+        python3 -c "import serial; print('pyserial version:', serial.VERSION)" || echo "pyserial missing"
+        python3 -c "import pyparsing; print('pyparsing version:', pyparsing.__version__)" || echo "pyparsing missing"
+        
+        # Install missing dependencies if needed
+        python3 -m pip install click pyserial pyparsing || echo "Installation failed"
         
         # Verify ESP-IDF installation by checking basic commands
         idf.py --version

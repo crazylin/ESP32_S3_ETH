@@ -32,12 +32,13 @@ jobs:
       run: |
         mkdir -p ~/esp
         cd ~/esp
-        git clone -b v5.2.3 --recursive https://github.com/espressif/esp-idf.git
+        git clone -b ${{ env.ESP_IDF_VERSION }} --recursive https://github.com/espressif/esp-idf.git
         cd esp-idf
         ./install.sh esp32s3
         
         # Install Python requirements for ESP-IDF
-        python3 -m pip install -r requirements.txt
+        python3 -m pip install -r tools/requirements/requirements.core.txt
+        python3 -m pip install click pyserial pyparsing
         
         source export.sh
         
