@@ -73,11 +73,22 @@ fi
 
 # 复制CMake预设文件
 echo "✓ 复制CMake预设文件..."
-if [ -f "../nanobuild-scripts/CMakePresets-W5500.json" ]; then
-    cp ../nanobuild-scripts/CMakePresets-W5500.json CMakePresets.json
+if [ -f "../CMakePresets-W5500.json" ]; then
+    cp ../CMakePresets-W5500.json CMakePresets.json
+    echo "  已复制 CMakePresets-W5500.json -> CMakePresets.json"
+elif [ -f "./CMakePresets-W5500.json" ]; then
+    cp ./CMakePresets-W5500.json CMakePresets.json
     echo "  已复制 CMakePresets-W5500.json -> CMakePresets.json"
 else
     echo "  警告: 未找到 CMakePresets-W5500.json"
+fi
+
+# 验证CMake预设文件
+if [ -f "CMakePresets.json" ]; then
+    echo "  ✅ CMakePresets.json 已创建"
+else
+    echo "  ❌ CMakePresets.json 未创建"
+    exit 1
 fi
 
 # 验证构建配置
