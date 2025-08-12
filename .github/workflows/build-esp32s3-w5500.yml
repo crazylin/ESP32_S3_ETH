@@ -274,7 +274,7 @@ jobs:
           fi
         fi
         
-        # 方法 3: 检查系统 PATH
+        # 方法 3: 检查系统 PATH 和 Xtensa 工具链
         if [ "$ESP32S3_TOOLCHAIN_FOUND" = false ]; then
           echo "Checking system PATH for ESP32-S3 toolchain..."
           if command -v xtensa-esp32s3-elf-gcc >/dev/null 2>&1; then
@@ -282,6 +282,14 @@ jobs:
             ESP32S3_TOOLCHAIN_PATH=$(dirname "$(which xtensa-esp32s3-elf-gcc)")
             ESP32S3_TOOLCHAIN_PATH=$(dirname "$ESP32S3_TOOLCHAIN_PATH")
             ESP32S3_TOOLCHAIN_FOUND=true
+          else
+            echo "Checking for Xtensa toolchain in PATH..."
+            if command -v xtensa-esp-elf-gcc >/dev/null 2>&1; then
+              echo "✓ Xtensa toolchain found in system PATH"
+              ESP32S3_TOOLCHAIN_PATH=$(dirname "$(which xtensa-esp-elf-gcc)")
+              ESP32S3_TOOLCHAIN_PATH=$(dirname "$ESP32S3_TOOLCHAIN_PATH")
+              ESP32S3_TOOLCHAIN_FOUND=true
+            fi
           fi
         fi
         
@@ -291,16 +299,52 @@ jobs:
           echo "Toolchain contents:"
           ls -la "$ESP32S3_TOOLCHAIN_PATH/"
           
-          # 验证关键工具是否存在
+          # 检查 bin 目录
+          if [ -d "$ESP32S3_TOOLCHAIN_PATH/bin" ]; then
+            echo "Bin directory contents:"
+            ls -la "$ESP32S3_TOOLCHAIN_PATH/bin/" | head -20
+          else
+            echo "No bin directory found, checking for alternative structure..."
+            # 检查是否有其他可能的目录结构
+            find "$ESP32S3_TOOLCHAIN_PATH" -name "bin" -type d 2>/dev/null | while read bin_dir; do
+              echo "Found bin directory at: $bin_dir"
+              ls -la "$bin_dir/" | head -10
+            done
+          fi
+          
+          # 验证关键工具是否存在 (检查多种可能的编译器名称)
+          COMPILER_FOUND=false
+          
+          # 检查 ESP32-S3 特定的编译器
           if [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" ]; then
             echo "✓ ESP32-S3 GCC compiler found"
             echo "GCC version: $($ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc --version | head -1)"
-            
+            COMPILER_FOUND=true
+            COMPILER_NAME="xtensa-esp32s3-elf-gcc"
+          # 检查通用的 Xtensa 编译器
+          elif [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-gcc" ]; then
+            echo "✓ Xtensa GCC compiler found (ESP32-S3 compatible)"
+            echo "GCC version: $($ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-gcc --version | head -1)"
+            COMPILER_FOUND=true
+            COMPILER_NAME="xtensa-esp-elf-gcc"
+          fi
+          
+          if [ "$COMPILER_FOUND" = true ]; then
             # 设置环境变量
             export PATH="$ESP32S3_TOOLCHAIN_PATH/bin:$PATH"
             echo "✓ Toolchain PATH updated: $ESP32S3_TOOLCHAIN_PATH/bin"
+            echo "COMPILER_NAME=$COMPILER_NAME" >> $GITHUB_ENV
+            
+            # 测试编译器是否真的工作
+            echo "Testing compiler functionality..."
+            if $ESP32S3_TOOLCHAIN_PATH/bin/$COMPILER_NAME --version >/dev/null 2>&1; then
+              echo "✓ Compiler test successful"
+            else
+              echo "✗ Compiler test failed - compiler found but not working"
+              ESP32S3_TOOLCHAIN_FOUND=false
+            fi
           else
-            echo "✗ ESP32-S3 GCC compiler not found in toolchain directory"
+            echo "✗ No compatible GCC compiler found in toolchain directory"
             echo "Available files in bin directory:"
             ls -la "$ESP32S3_TOOLCHAIN_PATH/bin/" 2>/dev/null || echo "No bin directory found"
             ESP32S3_TOOLCHAIN_FOUND=false
@@ -344,8 +388,30 @@ jobs:
         if [ -n "$ESP32S3_TOOLCHAIN_PATH" ]; then
           echo "Using verified ESP32-S3 toolchain: $ESP32S3_TOOLCHAIN_PATH"
           echo "PATH=$ESP32S3_TOOLCHAIN_PATH/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
-          echo "CXX=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+          
+          # 根据找到的编译器类型设置环境变量
+          if [ -n "$COMPILER_NAME" ]; then
+            echo "CC=$ESP32S3_TOOLCHAIN_PATH/bin/$COMPILER_NAME" >> $GITHUB_ENV
+            # 设置对应的 C++ 编译器
+            if [[ "$COMPILER_NAME" == "xtensa-esp32s3-elf-gcc" ]]; then
+              echo "CXX=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+            else
+              echo "CXX=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-g++" >> $GITHUB_ENV
+            fi
+          else
+            # 尝试自动检测编译器
+            if [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" ]; then
+              echo "CC=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
+              echo "CXX=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+            elif [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-gcc" ]; then
+              echo "CC=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-gcc" >> $GITHUB_ENV
+              echo "CXX=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-g++" >> $GITHUB_ENV
+            else
+              echo "No compatible compiler found in toolchain"
+              exit 1
+            fi
+          fi
+          
           echo "ESP32S3_TOOLCHAIN_PATH=$ESP32S3_TOOLCHAIN_PATH" >> $GITHUB_ENV
         else
           # 如果环境变量中没有，尝试重新查找
@@ -355,21 +421,22 @@ jobs:
             echo "Found ESP32-S3 toolchain: $ESP32S3_TOOLCHAIN"
             echo "PATH=$ESP32S3_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
             echo "CC=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
-            echo "CXX=$ESP32S3_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
+            echo "CXX=$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
             echo "ESP32S3_TOOLCHAIN_PATH=$ESP32S3_TOOLCHAIN" >> $GITHUB_ENV
           else
             echo "ESP32-S3 toolchain not found, trying to find any Xtensa toolchain..."
             XTENSA_TOOLCHAIN=$(find "$HOME/.espressif/tools" -name "*xtensa*" -type d 2>/dev/null | head -1)
-          if [ -n "$XTENSA_TOOLCHAIN" ]; then
-            echo "Found Xtensa toolchain: $XTENSA_TOOLCHAIN"
-            echo "PATH=$XTENSA_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
-            echo "CC=$XTENSA_TOOLCHAIN/bin/xtensa-esp32s3-elf-gcc" >> $GITHUB_ENV
-            echo "CXX=$XTENSA_TOOLCHAIN/bin/xtensa-esp32s3-elf-g++" >> $GITHUB_ENV
-          else
-            echo "No Xtensa toolchain found!"
-            exit 1
+            if [ -n "$XTENSA_TOOLCHAIN" ]; then
+              echo "Found Xtensa toolchain: $XTENSA_TOOLCHAIN"
+              echo "PATH=$XTENSA_TOOLCHAIN/bin:$PATH" >> $GITHUB_ENV
+              echo "CC=$XTENSA_TOOLCHAIN/bin/xtensa-esp-elf-gcc" >> $GITHUB_ENV
+              echo "CXX=$XTENSA_TOOLCHAIN/bin/xtensa-esp-elf-g++" >> $GITHUB_ENV
+              echo "ESP32S3_TOOLCHAIN_PATH=$XTENSA_TOOLCHAIN" >> $GITHUB_ENV
+            else
+              echo "No Xtensa toolchain found!"
+              exit 1
+            fi
           fi
-        fi
         fi
         
         # 查找并设置 Ninja 路径
@@ -395,14 +462,20 @@ jobs:
         echo "=== Final ESP32-S3 Toolchain Verification ==="
         if [ -n "$ESP32S3_TOOLCHAIN_PATH" ]; then
           echo "ESP32S3_TOOLCHAIN_PATH: $ESP32S3_TOOLCHAIN_PATH"
-          echo "CC: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc"
-          echo "CXX: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++"
           
-          # 验证工具链文件存在
+          # 检查多种可能的编译器
           if [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc" ]; then
+            echo "CC: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-gcc"
+            echo "CXX: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp32s3-elf-g++"
             echo "✓ ESP32-S3 GCC compiler file exists"
+          elif [ -f "$ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-gcc" ]; then
+            echo "CC: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-gcc"
+            echo "CXX: $ESP32S3_TOOLCHAIN_PATH/bin/xtensa-esp-elf-g++"
+            echo "✓ Xtensa GCC compiler file exists (ESP32-S3 compatible)"
           else
-            echo "✗ ESP32-S3 GCC compiler file not found"
+            echo "✗ No compatible GCC compiler file found"
+            echo "Available files in bin directory:"
+            ls -la "$ESP32S3_TOOLCHAIN_PATH/bin/" 2>/dev/null || echo "No bin directory found"
             exit 1
           fi
         else
@@ -410,8 +483,11 @@ jobs:
           if command -v xtensa-esp32s3-elf-gcc >/dev/null 2>&1; then
             echo "✓ ESP32-S3 GCC compiler found in PATH"
             echo "GCC path: $(which xtensa-esp32s3-elf-gcc)"
+          elif command -v xtensa-esp-elf-gcc >/dev/null 2>&1; then
+            echo "✓ Xtensa GCC compiler found in PATH (ESP32-S3 compatible)"
+            echo "GCC path: $(which xtensa-esp-elf-gcc)"
           else
-            echo "✗ ESP32-S3 GCC compiler not found in PATH"
+            echo "✗ No compatible GCC compiler found in PATH"
             exit 1
           fi
         fi
