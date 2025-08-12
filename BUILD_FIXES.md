@@ -85,16 +85,20 @@
 
 **问题**: JSON Parse Error: Duplicate key和Extra non-whitespace
 **修复**:
-- 移除重复的`NF_DEBUGGER_NO_PORT`键
-- 移除重复的`NF_BUILD_RTM`键
-- 移除重复的变量定义
+- 完全重建CMakePresets-W5500.json文件，消除所有重复键
+- 移除以下重复变量定义：
+  - `NF_DEBUGGER_NO_PORT`
+  - `NF_BUILD_RTM`
+  - `NF_PLATFORM_NO_CLR_WARNINGS`
+  - `SUPPORT_ANY_BASE_CONVERSION`
+  - `NF_FEATURE_BUILD_ALL`
 - 清理文件末尾的多余字符
 - 验证JSON语法正确性
 
-**具体修复**:
-- Release配置: 保留第一个`NF_BUILD_RTM: "ON"`，移除末尾的`"NF_BUILD_RTM": "OFF"`
-- Debug配置: 保留唯一的`NF_BUILD_RTM: "OFF"`
-- 确保所有键在各自对象中唯一
+**最终配置验证**:
+- 文件已通过JSON语法验证
+- Release和Debug预设均无重复键
+- 所有构建变量值已标准化
 
 ## 预期结果
 
