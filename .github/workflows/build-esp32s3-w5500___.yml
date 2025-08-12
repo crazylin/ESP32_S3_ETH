@@ -3,7 +3,8 @@ name: Build ESP32-S3 W5500
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
@@ -28,10 +29,12 @@ jobs:
 
       - name: Set target and clean build
         run: |
+          . /opt/esp/idf/export.sh
           idf.py set-target esp32s3 fullclean
 
       - name: Build project
         run: |
+          . /opt/esp/idf/export.sh
           idf.py build -v
 
       - name: Upload firmware binaries
