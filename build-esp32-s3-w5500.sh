@@ -71,7 +71,7 @@ if [ ! -d "build" ]; then
     mkdir -p build
 fi
 
-# 复制CMake预设文件
+# 复制CMake预设文件和补丁
 echo "✓ 复制CMake预设文件..."
 if [ -f "../CMakePresets-W5500.json" ]; then
     cp ../CMakePresets-W5500.json CMakePresets.json
@@ -81,6 +81,16 @@ elif [ -f "./CMakePresets-W5500.json" ]; then
     echo "  已复制 CMakePresets-W5500.json -> CMakePresets.json"
 else
     echo "  警告: 未找到 CMakePresets-W5500.json"
+fi
+
+# 复制CMake补丁文件
+echo "✓ 复制CMake补丁文件..."
+if [ -f "../CMakeLists-patch.txt" ]; then
+    cp ../CMakeLists-patch.txt CMakeLists-patch.txt
+    echo "  ✅ CMake补丁文件已复制"
+elif [ -f "./CMakeLists-patch.txt" ]; then
+    cp ./CMakeLists-patch.txt CMakeLists-patch.txt
+    echo "  ✅ CMake补丁文件已复制"
 fi
 
 # 验证CMake预设文件
@@ -102,6 +112,13 @@ echo "✓ 设置ESP-IDF环境变量..."
 export IDF_PATH="$HOME/esp/esp-idf"
 export IDF_TOOLS_PATH="$HOME/.espressif"
 
+# 清理之前的构建缓存
+echo "✓ 清理构建缓存..."
+if [ -d "build" ]; then
+    echo "  清理旧的构建目录..."
+    rm -rf build
+fi
+
 # 使用CMake预设配置构建
 echo "✓ 使用CMake预设配置构建..."
 if [ "$BUILD_TYPE" = "Debug" ]; then
@@ -118,91 +135,89 @@ if [ -f "build/build.ninja" ]; then
     echo "  ✅ CMake配置完成"
 else
     echo "  ❌ CMake配置失败"
+    echo "  检查CMake错误日志..."
+    cat build/CMakeFiles/CMakeError.log 2>/dev/null || echo "无错误日志"
     exit 1
 fi
+
+# 显示CMake缓存内容
+echo "✓ CMake缓存内容摘要:"
+grep -E "(NF_|TARGET_|RTOS|ESP32_)" build/CMakeCache.txt | head -10
 
 # 执行构建
 echo "✓ 开始构建..."
 echo "  构建预设: $BUILD_PRESET"
-echo "  构建目标: nanoCLR"
 
-# 检查可用的构建目标
-echo "  检查可用的构建目标..."
-cd build
-ninja -t targets | grep -i nano || echo "未找到nano相关目标"
-cd ..
-
-# 使用正确的构建命令，尝试多种目标
+# 使用CMake构建
+echo "  使用CMake构建..."
 if [ "$BUILD_TYPE" = "Debug" ]; then
-    echo "  尝试构建 nanoCLR..."
-    if cmake --build build --target nanoCLR 2>/dev/null; then
-        echo "  ✅ nanoCLR 构建成功"
-    elif cmake --build build --target all 2>/dev/null; then
-        echo "  ✅ all 目标构建成功"
-    else
-        echo "  列出所有可用目标..."
-        cd build && ninja -t targets | head -20 && cd ..
-        echo "  使用默认构建..."
-        cmake --build build
-    fi
+    echo "  构建Debug版本..."
+    cmake --build build --target all --config Debug
 else
-    echo "  尝试构建 nanoCLR..."
-    if cmake --build build --target nanoCLR 2>/dev/null; then
-        echo "  ✅ nanoCLR 构建成功"
-    elif cmake --build build --target all 2>/dev/null; then
-        echo "  ✅ all 目标构建成功"
-    else
-        echo "  列出所有可用目标..."
-        cd build && ninja -t targets | head -20 && cd ..
-        echo "  使用默认构建..."
-        cmake --build build
-    fi
+    echo "  构建Release版本..."
+    cmake --build build --target all --config Release
 fi
 
 # 验证构建结果
 echo "=== 构建完成 ==="
 echo "检查构建产物..."
 
-# 查找可能的固件文件
+# 检查构建目录是否存在
+if [ ! -d "build" ]; then
+    echo "  ❌ 构建目录不存在"
+    exit 1
+fi
+
+cd build
 FIRMWARE_FOUND=false
 
-# 检查常见的固件文件
-for firmware in "nanoCLR.bin" "nanoCLR.elf" "nanoCLR.bin"; do
-    if [ -f "build/$firmware" ]; then
-        echo "  ✅ 找到固件: build/$firmware"
-        ls -la "build/$firmware"
-        FIRMWARE_FOUND=true
+# 查找所有可能的固件文件
+FIRMWARE_FILES=$(find . -name "*.bin" -o -name "*.elf" | grep -E "(nanoCLR|app|firmware)" | head -10)
+
+if [ -n "$FIRMWARE_FILES" ]; then
+    echo "$FIRMWARE_FILES" | while read file; do
+        if [ -f "$file" ]; then
+            size=$(stat -c%s "$file" 2>/dev/null || echo "未知大小")
+            echo "  ✅ 找到: $file ($size bytes)"
+        fi
+    done
+    FIRMWARE_FOUND=true
+else
+    echo "  ⚠️  未找到标准固件文件"
+fi
+
+# 检查ESP-IDF标准输出文件
+echo "  检查ESP-IDF标准输出..."
+for target_dir in "app" "bootloader" "partition_table"; do
+    if [ -d "$target_dir" ]; then
+        echo "  ✅ 目录存在: $target_dir"
+        ls -la "$target_dir"/*.bin 2>/dev/null | head -3
     fi
 done
 
-# 检查整个build目录的内容
-echo "  build目录内容:"
-ls -la build/ | head -10
-
-# 检查是否有.elf文件（调试文件）
-if [ -f "build/nanoCLR.elf" ]; then
-    echo "  ✅ nanoCLR.elf 调试文件已生成"
-    ls -la build/nanoCLR.elf
-    FIRMWARE_FOUND=true
+# 检查是否有分区表
+if [ -f "partitions.bin" ]; then
+    echo "  ✅ partitions.bin 已生成"
+    ls -la partitions.bin
 fi
 
 # 检查是否有bootloader
-if [ -f "build/bootloader/bootloader.bin" ]; then
+if [ -f "bootloader/bootloader.bin" ]; then
     echo "  ✅ bootloader.bin 已生成"
-    ls -la build/bootloader/bootloader.bin
+    ls -la bootloader/bootloader.bin
 fi
 
-# 检查是否有分区表
-if [ -f "build/partitions.bin" ]; then
-    echo "  ✅ partitions.bin 已生成"
-    ls -la build/partitions.bin
+# 检查CMake生成的文件
+if [ -f "build.ninja" ]; then
+    echo "  ✅ build.ninja 已生成"
 fi
 
-# 如果没有找到任何固件，列出所有可能的文件
-if [ "$FIRMWARE_FOUND" = false ]; then
-    echo "  ⚠️  未找到标准固件文件，检查其他可能的目标:"
-    find build/ -name "*.bin" -o -name "*.elf" | head -10
-fi
+# 显示构建摘要
+echo "  构建摘要:"
+echo "  工作目录: $(pwd)"
+echo "  构建类型: $BUILD_TYPE"
+echo "  构建时间: $(date)"
 
-# 只要构建过程完成就视为成功
+cd ..
+
 echo "  ✅ 构建过程已完成"
