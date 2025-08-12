@@ -159,6 +159,9 @@ jobs:
         # Install ESP-IDF tools
         ./install.sh esp32s3
         
+        # Install all Python requirements including click
+        python3 -m pip install -r requirements.txt click pyserial pyparsing
+        
         # Export environment
         source export.sh
         

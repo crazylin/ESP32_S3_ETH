@@ -93,6 +93,7 @@ jobs:
           ~/.espressif/python_env
           ~/.espressif/tools
           ~/.espressif/dist
+          /home/runner/.espressif
         key: ${{ steps.cache-keys.outputs.esp_idf_key }}
         restore-keys: |
           ${{ runner.os }}-esp-idf-
@@ -163,8 +164,8 @@ jobs:
         # Install ESP-IDF tools for ESP32-S3
         ./install.sh esp32s3
         
-        # Install Python requirements for ESP-IDF
-        python3 -m pip install -r requirements.txt
+        # Install all Python requirements including click
+        python3 -m pip install -r requirements.txt click pyserial pyparsing
         
         # Export environment
         source export.sh
@@ -178,6 +179,9 @@ jobs:
         source ~/esp/esp-idf/export.sh
         echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
         echo "PATH=$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_ENV
+        
+        # Ensure Python dependencies are available (cached or not)
+        python3 -m pip install click pyserial pyparsing || echo "Python packages already installed"
         
         # Verify ESP-IDF installation by checking basic commands
         idf.py --version
