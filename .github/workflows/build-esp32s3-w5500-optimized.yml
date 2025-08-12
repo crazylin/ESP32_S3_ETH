@@ -206,8 +206,8 @@ jobs:
     - name: Build nanoFramework firmware
       working-directory: nf-interpreter
       run: |
-        chmod +x ../build-esp32-s3-w5500.sh
-        ../build-esp32-s3-w5500.sh ${{ matrix.build_type }}
+        chmod +x ../nanobuild-scripts/build-esp32-s3-w5500.sh
+        ../nanobuild-scripts/build-esp32-s3-w5500.sh ${{ matrix.build_type }}
 
     - name: Package Firmware
       working-directory: nf-interpreter

@@ -208,8 +208,8 @@ jobs:
     - name: Configure CMake (with cache)
       working-directory: nf-interpreter
       run: |
-        chmod +x ../build-esp32-s3-w5500.sh
-        ../build-esp32-s3-w5500.sh ${{ matrix.build_type }}
+        chmod +x ../nanobuild-scripts/build-esp32-s3-w5500.sh
+        ../nanobuild-scripts/build-esp32-s3-w5500.sh ${{ matrix.build_type }}
 
     - name: Build Firmware (with ccache)
       working-directory: nf-interpreter

@@ -79,8 +79,8 @@ jobs:
     - name: Build firmware
         run: |
           cd nf-interpreter
-          chmod +x ../build-esp32-s3-w5500.sh
-          ../build-esp32-s3-w5500.sh
+          chmod +x ../nanobuild-scripts/build-esp32-s3-w5500.sh
+          ../nanobuild-scripts/build-esp32-s3-w5500.sh
         
         # Check if build was successful
         if [ -f "build/nanoCLR.bin" ]; then
